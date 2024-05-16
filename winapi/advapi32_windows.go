@@ -1,4 +1,4 @@
-package etw
+package winapi
 
 import (
 	"syscall"
@@ -107,31 +107,6 @@ func EventAccessQuery(
 	return syscall.Errno(r1)
 }
 
-func EventAccessControl(guid *GUID,
-	operation uint32,
-	sid *SID,
-	rights uint32,
-	allowOrDeny bool) error {
-
-	// we need a byte not a bool
-	var bAllowOrDeny byte
-
-	if allowOrDeny {
-		bAllowOrDeny = 1
-	}
-
-	r1, _, _ := eventAccessControl.Call(
-		uintptr(unsafe.Pointer(guid)),
-		uintptr(operation),
-		uintptr(unsafe.Pointer(sid)),
-		uintptr(rights),
-		uintptr(bAllowOrDeny))
-	if r1 == 0 {
-		return nil
-	}
-	return syscall.Errno(r1)
-}
-
 func ConvertSecurityDescriptorToStringSecurityDescriptorW(
 	securityDescriptor *SecurityDescriptor,
 	requestedStringSDRevision uint32,
@@ -156,25 +131,4 @@ func ConvertSecurityDescriptorToStringSecurityDescriptorW(
 		return s, nil
 	}
 	return "", err
-}
-
-func ConvertStringSidToSidW(stringSid string) (sid *SID, err error) {
-
-	var rc uintptr
-	var utf16Sid *uint16
-
-	if utf16Sid, err = syscall.UTF16PtrFromString(stringSid); err != nil {
-		return
-	}
-
-	rc, _, err = convertStringSidToSidW.Call(
-		uintptr(unsafe.Pointer(utf16Sid)),
-		uintptr(unsafe.Pointer(&sid)))
-
-	if rc != 0 {
-		// success
-		err = nil
-	}
-
-	return
 }

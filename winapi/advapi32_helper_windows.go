@@ -1,11 +1,11 @@
-package etw
+package winapi
 
 import (
 	"unsafe"
 )
 
 func GetAccessString(guid string) (s string, err error) {
-	g := MustParseGUIDFromString(guid)
+	g := MustParseGUID(guid)
 	bSize := uint32(0)
 	// retrieves size
 	_ = EventAccessQuery(g, nil, &bSize)

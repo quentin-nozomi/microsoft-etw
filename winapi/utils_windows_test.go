@@ -1,4 +1,4 @@
-package etw
+package winapi
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package etw
+package winapi
 
 import (
 	"syscall"
@@ -16,14 +16,8 @@ var (
 	// https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertsecuritydescriptortostringsecuritydescriptorw
 	convertSecurityDescriptorToStringSecurityDescriptorW = advapi.NewProc("ConvertSecurityDescriptorToStringSecurityDescriptorW")
 
-	// https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertstringsidtosidw
-	convertStringSidToSidW = advapi.NewProc("ConvertStringSidToSidW")
-
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-enabletraceex2
 	enableTraceEx2 = advapi.NewProc("EnableTraceEx2")
-
-	// https://learn.microsoft.com/en-us/windows/win32/api/evntcons/nf-evntcons-eventaccesscontrol
-	eventAccessControl = advapi.NewProc("EventAccessControl")
 
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntcons/nf-evntcons-eventaccessquery
 	eventAccessQuery = advapi.NewProc("EventAccessQuery")

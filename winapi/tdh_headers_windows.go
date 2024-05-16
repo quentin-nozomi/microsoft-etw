@@ -1,4 +1,4 @@
-package etw
+package winapi
 
 import (
 	"fmt"
@@ -69,17 +69,17 @@ type TraceEventInfo struct {
 	EventPropertyInfoArray      [1]EventPropertyInfo
 }
 
-func (t *TraceEventInfo) pointer() uintptr {
+func (t *TraceEventInfo) Pointer() uintptr {
 	return uintptr(unsafe.Pointer(t))
 }
 
-func (t *TraceEventInfo) pointerOffset(offset uintptr) uintptr {
-	return t.pointer() + offset
+func (t *TraceEventInfo) PointerOffset(offset uintptr) uintptr {
+	return t.Pointer() + offset
 }
 
 func (t *TraceEventInfo) stringAt(offset uintptr) string {
 	if offset > 0 {
-		return UTF16AtOffsetToString(t.pointer(), offset)
+		return UTF16AtOffsetToString(t.Pointer(), offset)
 	}
 	return ""
 }
@@ -163,7 +163,7 @@ func (t *TraceEventInfo) GetEventPropertyInfoAt(i uint32) *EventPropertyInfo {
 }
 
 func (t *TraceEventInfo) PropertyNameOffset(i uint32) uintptr {
-	return t.pointer() + uintptr(t.GetEventPropertyInfoAt(i).NameOffset)
+	return t.Pointer() + uintptr(t.GetEventPropertyInfoAt(i).NameOffset)
 }
 
 type DecodingSource int32

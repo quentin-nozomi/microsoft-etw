@@ -1,6 +1,6 @@
 //go:build windows
 
-package etw
+package winapi
 
 import (
 	"syscall"
@@ -76,9 +76,10 @@ type WnodeHeader struct {
 	Flags         uint32
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_properties
 type EventTraceProperties struct {
 	Wnode               WnodeHeader
-	BufferSize          uint32
+	BufferSize          uint32 // in KB
 	MinimumBuffers      uint32
 	MaximumBuffers      uint32
 	MaximumFileSize     uint32
@@ -97,29 +98,29 @@ type EventTraceProperties struct {
 	LoggerNameOffset    uint32
 }
 
-func NewEventTraceSessionProperties(sessionName string) (*EventTraceProperties, uint32) {
-	size := ((len(sessionName) + 1) * 2) + int(unsafe.Sizeof(EventTraceProperties{}))
-	s := make([]byte, size)
-	return (*EventTraceProperties)(unsafe.Pointer(&s[0])), uint32(size)
-}
+// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_properties
+// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_properties#members
+// https://learn.microsoft.com/en-us/message-analyzer/specifying-advanced-etw-session-configuration-settings
+func NewEventTracingSessionProperties(logSessionName string) *EventTraceProperties {
+	// Go string UTF-8, will be converted to null terminated UTF-16 for Windows
+	eventTracePropertiesBufferSize := ((len(logSessionName) + 1) * 2) + int(unsafe.Sizeof(EventTraceProperties{}))
 
-func NewRealTimeEventTraceSessionProperties(logSessionName string) *EventTraceProperties {
-	sessionProperties, size := NewEventTraceSessionProperties(logSessionName)
+	eventTraceProperties := EventTraceProperties{
+		// https://learn.microsoft.com/en-us/windows/win32/etw/wnode-header
+		// https://learn.microsoft.com/en-us/windows/win32/etw/wnode-header#members
+		Wnode: WnodeHeader{
+			BufferSize:    uint32(eventTracePropertiesBufferSize),
+			Guid:          GUID{},
+			ClientContext: 1,
+			Flags:         WNODE_FLAG_ALL_DATA,
+		},
+		BufferSize:        64, // 64 KB
+		LogFileMode:       EVENT_TRACE_REAL_TIME_MODE,
+		LogFileNameOffset: 0,
+		LoggerNameOffset:  uint32(unsafe.Sizeof(EventTraceProperties{})),
+	}
 
-	// Necessary fields for SessionProperties struct
-	sessionProperties.Wnode.BufferSize = size // this is optimized by ETWframework
-	sessionProperties.Wnode.Guid = GUID{}     //To set
-	sessionProperties.Wnode.ClientContext = 1 // QPC
-	sessionProperties.Wnode.Flags = WNODE_FLAG_ALL_DATA
-	sessionProperties.LogFileMode = EVENT_TRACE_REAL_TIME_MODE
-	sessionProperties.LogFileNameOffset = 0
-	// ETW event can be up to 64KB size so if the buffer size is not at least
-	// big enough to contain such an event, the event will be lost
-	// source: https://docs.microsoft.com/en-us/message-analyzer/specifying-advanced-etw-session-configuration-settings
-	sessionProperties.BufferSize = 64
-	sessionProperties.LoggerNameOffset = uint32(unsafe.Sizeof(EventTraceProperties{}))
-
-	return sessionProperties
+	return &eventTraceProperties
 }
 
 type EnableTraceParameters struct {
@@ -141,6 +142,14 @@ type EventFilterEventID struct {
 	Count    uint16
 
 	Events [1]uint16 // it is easier to implement in Go with a fixed array size
+}
+
+// built-in max only available in Go 1.21+
+func getMax(a, b int) int {
+	if a < b {
+		return b
+	}
+	return a
 }
 
 func AllocEventFilterEventID(filter []uint16) (f *EventFilterEventID) {

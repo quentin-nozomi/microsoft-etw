@@ -1,21 +1,9 @@
-package etw
+package winapi
 
 import (
 	"syscall"
 	"unsafe"
 )
-
-func TdhEnumerateProviders(
-	pBuffer *ProviderEnumerationInfo,
-	pBufferSize *uint32) error {
-	r1, _, _ := tdhEnumerateProviders.Call(
-		uintptr(unsafe.Pointer(pBuffer)),
-		uintptr(unsafe.Pointer(pBufferSize)))
-	if r1 == 0 {
-		return nil
-	}
-	return syscall.Errno(r1)
-}
 
 func TdhGetEventInformation(pEvent *EventRecord,
 	tdhContextCount uint32,

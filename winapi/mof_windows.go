@@ -1,10 +1,11 @@
-package etw
+package winapi
 
 type MofClass struct {
 	Name   string // Class name
 	BaseId uint16 // Serves as base to compute event id
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/etw/nt-kernel-logger-constants
 var (
 	// The final event id of Mof Events is computed by BaseId + Opcode.
 	// As Opcode is uint8 we jump BaseIds every 0xff so that we do not overlap event ids between classes

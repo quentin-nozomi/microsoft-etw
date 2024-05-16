@@ -10,12 +10,10 @@ import (
 
 // Requires elevated privileges
 func main() {
-	s := etw.NewRealTimeSession("ArcTraceSession")
+	eventTracingSession := etw.NewEventTracingSession("ArcTraceSession")
 
-	defer s.Stop()
-
-	// enable only one provider, multiple possible
-	// provider := etw.MustParseProvider("Microsoft-Windows-Sysmon")
+	defer eventTracingSession.Stop()
+	
 	provider := etw.Provider{
 		GUID:            "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
 		Name:            "Microsoft-Windows-Sysmon",
@@ -24,7 +22,7 @@ func main() {
 		MatchAllKeyword: 0,
 		Filter:          nil,
 	}
-	if err := s.EnableProvider(provider); err != nil {
+	if err := eventTracingSession.EnableProvider(provider); err != nil {
 		panic(err)
 	}
 
@@ -32,7 +30,7 @@ func main() {
 
 	defer c.Stop()
 
-	c.FromSessions(s)
+	c.FromSessions(eventTracingSession)
 
 	go func() {
 		for e := range c.Events {

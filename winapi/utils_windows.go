@@ -1,4 +1,4 @@
-package etw
+package winapi
 
 import (
 	"crypto/rand"
@@ -6,13 +6,6 @@ import (
 	"syscall"
 	"unsafe"
 )
-
-func getMax(a, b int) int {
-	if a < b {
-		return b
-	}
-	return a
-}
 
 // UTF16BytesToString transforms a bytes array of UTF16 encoded characters to a Go string
 func UTF16BytesToString(utf16 []byte) string {

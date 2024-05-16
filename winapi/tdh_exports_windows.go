@@ -1,4 +1,4 @@
-package etw
+package winapi
 
 import (
 	"syscall"
@@ -7,7 +7,6 @@ import (
 var (
 	tdh = syscall.NewLazyDLL("tdh.dll")
 
-	tdhEnumerateProviders     = tdh.NewProc("TdhEnumerateProviders")
 	tdhFormatProperty         = tdh.NewProc("TdhFormatProperty")
 	tdhGetEventInformation    = tdh.NewProc("TdhGetEventInformation")
 	tdhGetEventMapInformation = tdh.NewProc("TdhGetEventMapInformation")
