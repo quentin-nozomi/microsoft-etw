@@ -14,36 +14,6 @@ const (
 
 const (
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_properties
-	EVENT_TRACE_FLAG_PROCESS    = 0x00000001
-	EVENT_TRACE_FLAG_THREAD     = 0x00000002
-	EVENT_TRACE_FLAG_IMAGE_LOAD = 0x00000004
-
-	EVENT_TRACE_FLAG_DISK_IO = 0x00000100
-
-	EVENT_TRACE_FLAG_MEMORY_PAGE_FAULTS = 0x00001000
-	EVENT_TRACE_FLAG_MEMORY_HARD_FAULTS = 0x00002000
-
-	EVENT_TRACE_FLAG_NETWORK_TCPIP = 0x00010000
-
-	EVENT_TRACE_FLAG_REGISTRY = 0x00020000
-	EVENT_TRACE_FLAG_DBGPRINT = 0x00040000
-
-	EVENT_TRACE_FLAG_PROCESS_COUNTERS = 0x00000008
-	EVENT_TRACE_FLAG_DPC              = 0x00000020
-	EVENT_TRACE_FLAG_INTERRUPT        = 0x00000040
-	EVENT_TRACE_FLAG_SYSTEMCALL       = 0x00000080
-
-	EVENT_TRACE_FLAG_DISK_IO_INIT = 0x00000400
-	EVENT_TRACE_FLAG_ALPC         = 0x00100000
-	EVENT_TRACE_FLAG_SPLIT_IO     = 0x00200000
-
-	EVENT_TRACE_FLAG_DRIVER       = 0x00800000
-	EVENT_TRACE_FLAG_PROFILE      = 0x01000000
-	EVENT_TRACE_FLAG_FILE_IO      = 0x02000000
-	EVENT_TRACE_FLAG_FILE_IO_INIT = 0x04000000
-
-	EVENT_TRACE_FLAG_VIRTUAL_ALLOC = 0x00004000
-
 	EVENT_TRACE_REAL_TIME_MODE = 0x00000100
 
 	EVENT_TRACE_CONTROL_STOP = 1
@@ -123,6 +93,7 @@ func NewEventTracingSessionProperties(logSessionName string) *EventTraceProperti
 	return &eventTraceProperties
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-enable_trace_parameters
 type EnableTraceParameters struct {
 	Version          uint32
 	EnableProperty   uint32
@@ -388,18 +359,6 @@ type SystemTime struct {
 	Milliseconds uint16
 }
 
-const (
-	SDDL_REVISION_1 = 1
-)
-
-type SecurityDescriptorControl uint32
-
-type SecurityInformation uint32
-
-const (
-	DACL_SECURITY_INFORMATION = SecurityInformation(0x00000004)
-)
-
 type SidIdentifierAuthority struct {
 	Value [6]uint8
 }
@@ -420,17 +379,11 @@ type ACL struct {
 }
 
 type SecurityDescriptor struct {
-	Revision byte
-	Sbz1     byte
-	Control  SecurityDescriptorControl
-	Owner    *SID
-	Group    *SID
-	Sacl     *ACL
-	Dacl     *ACL
+	Revision                  byte
+	Sbz1                      byte
+	SecurityDescriptorControl uint32
+	Owner                     *SID
+	Group                     *SID
+	Sacl                      *ACL
+	Dacl                      *ACL
 }
-
-type EventSecurityOperation uint32
-
-const (
-	EVENT_SECURITY_SET_DACL = EventSecurityOperation(0)
-)

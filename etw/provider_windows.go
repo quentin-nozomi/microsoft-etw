@@ -1,8 +1,9 @@
 package etw
 
 import (
-	"github.com/0xrawsec/golang-etw/winapi"
 	"unsafe"
+
+	"github.com/0xrawsec/golang-etw/winapi"
 )
 
 type Provider struct {
@@ -15,7 +16,6 @@ type Provider struct {
 }
 
 func (p *Provider) eventIDFilterDescriptor() (d winapi.EventFilterDescriptor) {
-
 	efeid := winapi.AllocEventFilterEventID(p.Filter)
 	efeid.FilterIn = 0x1
 
@@ -28,9 +28,8 @@ func (p *Provider) eventIDFilterDescriptor() (d winapi.EventFilterDescriptor) {
 	return
 }
 
-func (p *Provider) BuildFilterDesc() (fd []winapi.EventFilterDescriptor) {
-
-	fd = append(fd, p.eventIDFilterDescriptor())
-
-	return
+func (p *Provider) BuildFilterDesc() []winapi.EventFilterDescriptor {
+	var eventFilterDescriptor []winapi.EventFilterDescriptor
+	eventFilterDescriptor = append(eventFilterDescriptor, p.eventIDFilterDescriptor())
+	return eventFilterDescriptor
 }

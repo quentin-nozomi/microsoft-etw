@@ -7,14 +7,6 @@ import (
 	"strings"
 )
 
-const (
-	nullGUIDStr = "{00000000-0000-0000-0000-000000000000}"
-)
-
-var (
-	nullGUID = GUID{}
-)
-
 // https://learn.microsoft.com/en-us/windows/win32/api/guiddef/ns-guiddef-guid
 // https://learn.microsoft.com/en-us/windows/win32/api/guiddef/ns-guiddef-guid#members
 type GUID struct {
@@ -24,38 +16,6 @@ type GUID struct {
 	Data4 [8]byte
 }
 
-func (g *GUID) IsZero() bool {
-	return g.Equals(&nullGUID)
-}
-
-func (g *GUID) String() string {
-	return fmt.Sprintf("{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
-		g.Data1,
-		g.Data2,
-		g.Data3,
-		g.Data4[0], g.Data4[1],
-		g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7],
-	)
-}
-
-func (g *GUID) Equals(other *GUID) bool {
-	return g.Data1 == other.Data1 &&
-		g.Data2 == other.Data2 &&
-		g.Data3 == other.Data3 &&
-		g.Data4[0] == other.Data4[0] &&
-		g.Data4[1] == other.Data4[1] &&
-		g.Data4[2] == other.Data4[2] &&
-		g.Data4[3] == other.Data4[3] &&
-		g.Data4[4] == other.Data4[4] &&
-		g.Data4[5] == other.Data4[5] &&
-		g.Data4[6] == other.Data4[6] &&
-		g.Data4[7] == other.Data4[7]
-}
-
-var (
-	guidRegex = regexp.MustCompile(`^\{?[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}}?$`)
-)
-
 func MustParseGUID(sguid string) *GUID {
 	guid, err := ParseGUID(sguid)
 	if err != nil {
@@ -63,6 +23,10 @@ func MustParseGUID(sguid string) *GUID {
 	}
 	return guid
 }
+
+var (
+	guidRegex = regexp.MustCompile(`^\{?[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}}?$`)
+)
 
 func ParseGUID(guid string) (*GUID, error) {
 	outGuid := GUID{}
@@ -108,4 +72,40 @@ func ParseGUID(guid string) (*GUID, error) {
 	outGuid.Data4[7] = uint8(dataGroup & 0xff)
 
 	return &outGuid, nil
+}
+
+const (
+	nullGUIDStr = "{00000000-0000-0000-0000-000000000000}"
+)
+
+var (
+	nullGUID = GUID{}
+)
+
+func (g *GUID) IsZero() bool {
+	return g.Equals(&nullGUID)
+}
+
+func (g *GUID) String() string {
+	return fmt.Sprintf("{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+		g.Data1,
+		g.Data2,
+		g.Data3,
+		g.Data4[0], g.Data4[1],
+		g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7],
+	)
+}
+
+func (g *GUID) Equals(other *GUID) bool {
+	return g.Data1 == other.Data1 &&
+		g.Data2 == other.Data2 &&
+		g.Data3 == other.Data3 &&
+		g.Data4[0] == other.Data4[0] &&
+		g.Data4[1] == other.Data4[1] &&
+		g.Data4[2] == other.Data4[2] &&
+		g.Data4[3] == other.Data4[3] &&
+		g.Data4[4] == other.Data4[4] &&
+		g.Data4[5] == other.Data4[5] &&
+		g.Data4[6] == other.Data4[6] &&
+		g.Data4[7] == other.Data4[7]
 }

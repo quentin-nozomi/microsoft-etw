@@ -29,7 +29,6 @@ func NewEventTracingSession(name string) *EventTracingSession {
 	return eventTracingSession
 }
 
-// IsStarted returns true if the session is already started
 func (e *EventTracingSession) IsStarted() bool {
 	return e.sessionHandle != 0
 }
@@ -53,63 +52,60 @@ func (e *EventTracingSession) Start() error {
 	return nil
 }
 
-// EnableProvider enables the session to receive events from a given provider
-func (e *EventTracingSession) EnableProvider(prov Provider) (err error) {
-	var guid *winapi.GUID
+func (e *EventTracingSession) EnableProvider(prov Provider) error {
+	var err error
 
 	if !e.IsStarted() {
 		if err = e.Start(); err != nil {
-			return
+			return err
 		}
 	}
 
-	if guid, err = winapi.ParseGUID(prov.GUID); err != nil {
-		return
+	guid, guidErr := winapi.ParseGUID(prov.GUID)
+	if guidErr != nil {
+		return guidErr
 	}
 
 	params := winapi.EnableTraceParameters{
 		Version: 2,
-		// Does not seem to bring valuable information
-		// EnableProperty: EVENT_ENABLE_PROPERTY_PROCESS_START_KEY,
 	}
 
 	if len(prov.Filter) > 0 {
-		fds := prov.BuildFilterDesc()
-		if len(fds) > 0 {
-			params.EnableFilterDesc = &fds[0]
-			params.FilterDescCount = uint32(len(fds))
+		eventFilterDescriptors := prov.BuildFilterDesc()
+		if len(eventFilterDescriptors) > 0 {
+			params.EnableFilterDesc = &eventFilterDescriptors[0]
+			params.FilterDescCount = uint32(len(eventFilterDescriptors))
 		}
 	}
 
-	if err = winapi.EnableTraceEx2(
+	timeout := uint32(0)
+	enableTraceErr := winapi.EnableTraceEx2(
 		e.sessionHandle,
 		guid,
 		winapi.EVENT_CONTROL_CODE_ENABLE_PROVIDER,
 		prov.EnableLevel,
 		prov.MatchAnyKeyword,
 		prov.MatchAllKeyword,
-		0,
+		timeout,
 		&params,
-	); err != nil {
-		return
+	)
+	if enableTraceErr != nil {
+		return enableTraceErr
 	}
 
 	e.providers = append(e.providers, prov)
 
-	return
+	return nil
 }
 
-// TraceName implements Session interface
 func (e *EventTracingSession) TraceName() string {
 	return e.traceName
 }
 
-// Providers implements Session interface
 func (e *EventTracingSession) Providers() []Provider {
 	return e.providers
 }
 
-// Stop stops the session
 func (e *EventTracingSession) Stop() error {
 	return winapi.ControlTrace(e.sessionHandle, nil, e.properties, winapi.EVENT_TRACE_CONTROL_STOP)
 }

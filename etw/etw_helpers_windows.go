@@ -533,7 +533,6 @@ func (e *EventRecordHelper) EventID() uint16 {
 }
 
 func (e *EventRecordHelper) GetPropertyString(name string) (s string, err error) {
-
 	if p, ok := e.Properties[name]; ok {
 		return p.Value()
 	}

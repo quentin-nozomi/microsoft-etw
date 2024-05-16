@@ -13,14 +13,8 @@ var (
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-controltracew
 	controlTraceW = advapi.NewProc("ControlTraceW")
 
-	// https://learn.microsoft.com/en-us/windows/win32/api/sddl/nf-sddl-convertsecuritydescriptortostringsecuritydescriptorw
-	convertSecurityDescriptorToStringSecurityDescriptorW = advapi.NewProc("ConvertSecurityDescriptorToStringSecurityDescriptorW")
-
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-enabletraceex2
 	enableTraceEx2 = advapi.NewProc("EnableTraceEx2")
-
-	// https://learn.microsoft.com/en-us/windows/win32/api/evntcons/nf-evntcons-eventaccessquery
-	eventAccessQuery = advapi.NewProc("EventAccessQuery")
 
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-opentracew
 	openTraceW = advapi.NewProc("OpenTraceW")
