@@ -19,7 +19,7 @@ const (
 
 // Requires elevated privileges
 func main() {
-	eventTracingSession := etw.NewEventTracingSession(arcTraceSessionName)
+	eventTracingSession, _ := etw.NewEventTracingSession(arcTraceSessionName)
 
 	defer eventTracingSession.Stop()
 
@@ -35,9 +35,8 @@ func main() {
 		panic(sessionErr)
 	}
 
-	consumer := etw.NewRealTimeConsumer(context.Background())
-	consumer.FromTraceNames(arcTraceSessionName)
-	defer consumer.Stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	consumer := etw.NewEventCallback(ctx)
 
 	// receive events
 	go func() {
@@ -46,13 +45,16 @@ func main() {
 		}
 	}()
 
-	consumerErr := consumer.Start()
-	if consumerErr != nil {
-		panic(consumerErr)
+	startErr := consumer.Start(eventTracingSession.U16TraceName)
+	defer consumer.Stop()
+
+	if startErr != nil {
+		panic(startErr)
 	}
 
 	time.Sleep(20 * time.Second)
 
+	cancel()
 	if consumer.Err() != nil {
 		panic(consumer.Err())
 	}

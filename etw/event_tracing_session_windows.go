@@ -1,24 +1,32 @@
 package etw
 
 import (
+	"fmt"
 	"syscall"
 
 	"github.com/0xrawsec/golang-etw/winapi"
 )
 
 type EventTracingSession struct {
-	traceName  string
-	properties *winapi.EventTraceProperties
-	handle     syscall.Handle
+	traceName    string
+	U16TraceName []uint16
+	properties   *winapi.EventTraceProperties
+	handle       syscall.Handle
 }
 
-func NewEventTracingSession(name string) *EventTracingSession {
-	eventTracingSession := &EventTracingSession{
-		properties: winapi.NewEventTracingSessionProperties(name),
-		traceName:  name,
+func NewEventTracingSession(name string) (*EventTracingSession, error) {
+	u16TraceName, err := syscall.UTF16FromString(name)
+	if err != nil {
+		return nil, err
 	}
 
-	return eventTracingSession
+	eventTracingSession := &EventTracingSession{
+		properties:   winapi.NewEventTracingSessionProperties(name),
+		traceName:    name,
+		U16TraceName: u16TraceName,
+	}
+
+	return eventTracingSession, nil
 }
 
 func (e *EventTracingSession) IsStarted() bool {
@@ -26,25 +34,21 @@ func (e *EventTracingSession) IsStarted() bool {
 }
 
 func (e *EventTracingSession) StartTrace() error {
-	u16TraceName, err := syscall.UTF16PtrFromString(e.traceName)
-	if err != nil {
-		return err
+	u16TraceName, _ := syscall.UTF16FromString("ArcTraceSession")
+	err := winapi.StartTrace(&e.handle, &u16TraceName[0], e.properties)
+
+	if err == winapi.ERROR_ALREADY_EXISTS {
+		originalProperties := *e.properties // copy
+		controlTraceErr := winapi.ControlTrace(0, &u16TraceName[0], &originalProperties, winapi.EVENT_TRACE_CONTROL_STOP)
+		fmt.Println(controlTraceErr.Error())
+		return winapi.StartTrace(&e.handle, &u16TraceName[0], e.properties)
 	}
 
-	err = winapi.StartTrace(&e.handle, u16TraceName, e.properties)
-	if err != nil {
-		if err == winapi.ERROR_ALREADY_EXISTS {
-			prop := *e.properties // copy
-			_ = winapi.ControlTrace(0, u16TraceName, &prop, winapi.EVENT_TRACE_CONTROL_STOP)
-			return winapi.StartTrace(&e.handle, u16TraceName, e.properties)
-		}
-		return nil
-	}
-
-	return nil
+	return err
 }
 
 // https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-enabletraceex2#parameters
+// https://learn.microsoft.com/en-us/windows/win32/wes/defining-keywords-used-to-classify-types-of-events
 const (
 	maxVerbosity           = uint8(255)
 	defaultMatchAnyKeyword = uint64(0)

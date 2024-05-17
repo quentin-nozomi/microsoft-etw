@@ -132,7 +132,7 @@ type EventRecordHelper struct {
 	selectedProperties map[string]bool
 }
 
-func newEventRecordHelper(er *winapi.EventRecord) (erh *EventRecordHelper, err error) {
+func newEventParser(er *winapi.EventRecord) (erh *EventRecordHelper, err error) {
 	erh = &EventRecordHelper{}
 	erh.EventRec = er
 

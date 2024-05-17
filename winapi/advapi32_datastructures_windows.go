@@ -169,32 +169,29 @@ func NewEventIDFilterDescriptor(filter []uint16) EventFilterDescriptor {
 	return filterDescriptor
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_logfilew
 type EventTraceLogfile struct {
 	LogFileName   *uint16
 	LoggerName    *uint16
 	CurrentTime   int64
 	BuffersRead   uint32
-	Union1        uint32
+	Union1        uint32 // (LogFileMode, ProcessTraceMode)
 	CurrentEvent  EventTrace
 	LogfileHeader TraceLogfileHeader
 
-	BufferCallback uintptr //BufferCallback *EventTraceBufferCallback
+	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nc-evntrace-pevent_trace_buffer_callbackw
+	BufferCallback uintptr
 	BufferSize     uint32
 	Filled         uint32
 	EventsLost     uint32
-	Callback       uintptr
-	IsKernelTrace  uint32
-	Context        uintptr
+	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nc-evntrace-pevent_callback
+	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nc-evntrace-pevent_record_callback
+	Callback      uintptr
+	IsKernelTrace uint32
+	Context       uintptr
 }
 
-func (e *EventTraceLogfile) SetProcessTraceMode(ptm uint32) {
-	e.Union1 = ptm
-}
-
-type EventCallback func(*EventTrace)
-type EventRecordCallback func(*EventRecord) uintptr
-type EventTraceBufferCallback func(*EventTraceLogfile) uint32
-
+// https://learn.microsoft.com/en-us/windows/win32/api/evntcons/ns-evntcons-event_record
 type EventRecord struct {
 	EventHeader       EventHeader
 	BufferContext     BufferContext
