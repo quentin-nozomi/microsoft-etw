@@ -3,6 +3,7 @@ package etw
 import (
 	"context"
 	"fmt"
+	"github.com/0xrawsec/golang-etw/winguid"
 	"sync"
 	"syscall"
 
@@ -10,9 +11,7 @@ import (
 )
 
 // https://learn.microsoft.com/en-us/windows/win32/etw/lost-event
-var (
-	realTimeSessionLostEventGuid = winapi.MustParseGUID("{6A399AE0-4BC6-4DE9-870B-3657F8947E7E}")
-)
+var realTimeSessionLostEventGuid = winguid.MustParse("{6A399AE0-4BC6-4DE9-870B-3657F8947E7E}")
 
 type Consumer struct {
 	sync.WaitGroup
@@ -22,9 +21,7 @@ type Consumer struct {
 	lastError    error
 	closed       bool
 
-	// First callback executed, it allows to filter out events
-	// based on fields of raw ETW EventRecord structure. When this callback
-	// returns true event processing will continue, otherwise it is aborted.
+	// When this callback returns true event processing will continue, otherwise it is aborted.
 	// Filtering out events here has the lowest overhead.
 	EventRecordCallback func(*winapi.EventRecord) bool
 
@@ -45,7 +42,6 @@ type Consumer struct {
 	EventCallback func(*Event) error
 
 	Traces map[string]bool
-	Filter EventFilter
 	Events chan *Event
 
 	LostEvents uint64
@@ -59,7 +55,6 @@ func NewRealTimeConsumer(ctx context.Context) (c *Consumer) {
 	c = &Consumer{
 		traceHandles: make([]syscall.Handle, 0, 64),
 		Traces:       make(map[string]bool),
-		Filter:       NewProviderFilter(),
 		Events:       make(chan *Event, 4096),
 	}
 
@@ -83,7 +78,7 @@ func (c *Consumer) bufferCallback(*winapi.EventTraceLogfile) uintptr {
 func (c *Consumer) callback(er *winapi.EventRecord) (rc uintptr) {
 	var event *Event
 
-	if er.EventHeader.ProviderId.Equals(realTimeSessionLostEventGuid) {
+	if winguid.Equals(&er.EventHeader.ProviderId, realTimeSessionLostEventGuid) {
 		c.LostEvents++
 	}
 
@@ -194,16 +189,6 @@ func (c *Consumer) OpenTrace(name string) (err error) {
 	return nil
 }
 
-// FromSessions initializes the consumer from sessions
-func (c *Consumer) FromSessions(sessions ...Session) *Consumer {
-	for _, s := range sessions {
-		c.InitFilters(s.Providers())
-		c.Traces[s.TraceName()] = true
-	}
-
-	return c
-}
-
 // FromTraceNames initializes consumer from existing traces
 func (c *Consumer) FromTraceNames(names ...string) *Consumer {
 	for _, n := range names {
@@ -212,43 +197,26 @@ func (c *Consumer) FromTraceNames(names ...string) *Consumer {
 	return c
 }
 
-// InitFilters initializes event filtering from a Provider slice
-func (c *Consumer) InitFilters(providers []Provider) {
-	for _, p := range providers {
-		c.Filter.Update(&p)
-	}
-}
-
-// DefaultEventRecordCallback is the default EventRecordCallback method applied to Consumer created with NewRealTimeConsumer
+// see: EventRecordCallback
 func (c *Consumer) DefaultEventRecordCallback(h *EventRecordHelper) error {
-	h.Flags.Skip = !c.Filter.Match(h)
 	return nil
 }
 
-// DefaultEventCallback is the default EventCallback method applied to Consumer created with NewRealTimeConsumer
-func (c *Consumer) DefaultEventCallback(event *Event) (err error) {
-	// we have to check again here as the lock introduced delay
-	if c.ctx.Err() == nil {
-
-		// if the event can be skipped we send it in a non-blocking way
-		if event.Flags.Skippable {
-			select {
-			case c.Events <- event:
-			default:
-				c.Skipped++
-			}
-
-			return
-		}
-
-		// if we cannot skip event we send it in a blocking way
-		c.Events <- event
+// see: EventCallback
+func (c *Consumer) DefaultEventCallback(event *Event) error {
+	if c.ctx.Err() != nil {
+		return nil
 	}
 
-	return
+	select {
+	case c.Events <- event:
+	default:
+		c.Skipped++
+	}
+
+	return nil
 }
 
-// Start starts the consumer
 func (c *Consumer) Start() (err error) {
 
 	// opening all traces first
@@ -279,10 +247,8 @@ func (c *Consumer) Err() error {
 	return c.lastError
 }
 
-// Stop stops the Consumer and waits for the ProcessTrace calls
-// to be terminated
+// Stop stops the Consumer and waits for the ProcessTrace calls to be terminated
 func (c *Consumer) Stop() (err error) {
-	// calling context cancel function
 	c.cancel()
 	return c.close(true)
 }

@@ -17,7 +17,7 @@ func StartTrace(traceHandle *syscall.Handle, instanceName *uint16, properties *E
 }
 
 func EnableTraceEx2(traceHandle syscall.Handle,
-	providerId *GUID,
+	providerId *syscall.GUID,
 	controlCode uint32,
 	level uint8,
 	matchAnyKeyword uint64,
@@ -43,8 +43,8 @@ func EnableTraceEx2(traceHandle syscall.Handle,
 func ProcessTrace(
 	handleArray *syscall.Handle,
 	handleCount uint32,
-	startTime *FileTime,
-	endTime *FileTime,
+	startTime *syscall.Filetime,
+	endTime *syscall.Filetime,
 ) error {
 	errorCode, _, _ := processTrace.Call(
 		uintptr(unsafe.Pointer(handleArray)),

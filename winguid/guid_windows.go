@@ -1,35 +1,28 @@
-package winapi
+package winguid
 
 import (
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // https://learn.microsoft.com/en-us/windows/win32/api/guiddef/ns-guiddef-guid
 // https://learn.microsoft.com/en-us/windows/win32/api/guiddef/ns-guiddef-guid#members
-type GUID struct {
-	Data1 uint32
-	Data2 uint16
-	Data3 uint16
-	Data4 [8]byte
-}
 
-func MustParseGUID(sguid string) *GUID {
-	guid, err := ParseGUID(sguid)
+func MustParse(sguid string) *syscall.GUID {
+	guid, err := Parse(sguid)
 	if err != nil {
 		panic(err)
 	}
 	return guid
 }
 
-var (
-	guidRegex = regexp.MustCompile(`^\{?[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}}?$`)
-)
+var guidRegex = regexp.MustCompile(`^\{?[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}}?$`)
 
-func ParseGUID(guid string) (*GUID, error) {
-	outGuid := GUID{}
+func Parse(guid string) (*syscall.GUID, error) {
+	outGuid := syscall.GUID{}
 	var err error
 
 	guid = strings.ToUpper(guid)
@@ -75,18 +68,18 @@ func ParseGUID(guid string) (*GUID, error) {
 }
 
 const (
-	nullGUIDStr = "{00000000-0000-0000-0000-000000000000}"
+	NullGUIDStr = "{00000000-0000-0000-0000-000000000000}"
 )
 
 var (
-	nullGUID = GUID{}
+	nullGUID = syscall.GUID{}
 )
 
-func (g *GUID) IsZero() bool {
-	return g.Equals(&nullGUID)
+func IsZero(g *syscall.GUID) bool {
+	return Equals(g, &nullGUID)
 }
 
-func (g *GUID) String() string {
+func ToString(g *syscall.GUID) string {
 	return fmt.Sprintf("{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
 		g.Data1,
 		g.Data2,
@@ -96,7 +89,7 @@ func (g *GUID) String() string {
 	)
 }
 
-func (g *GUID) Equals(other *GUID) bool {
+func Equals(g *syscall.GUID, other *syscall.GUID) bool {
 	return g.Data1 == other.Data1 &&
 		g.Data2 == other.Data2 &&
 		g.Data3 == other.Data3 &&

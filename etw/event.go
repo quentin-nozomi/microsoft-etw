@@ -9,16 +9,15 @@ type EventID uint16
 type Event struct {
 	Flags struct {
 		Skippable bool // Use to flag event as being skippable for performance reason
-	} `json:"-"`
-
-	EventData map[string]interface{} `json:",omitempty"`
-	UserData  map[string]interface{} `json:",omitempty"`
+	}
+	EventData map[string]interface{}
+	UserData  map[string]interface{}
 	System    struct {
 		Channel     string
 		Computer    string
 		EventID     uint16
-		EventType   string `json:",omitempty"`
-		EventGuid   string `json:",omitempty"`
+		EventType   string
+		EventGuid   string
 		Correlation struct {
 			ActivityID        string
 			RelatedActivityID string
@@ -51,7 +50,7 @@ type Event struct {
 			SystemTime time.Time
 		}
 	}
-	ExtendedData []string `json:",omitempty"`
+	ExtendedData []string
 }
 
 func NewEvent() (e *Event) {
@@ -63,7 +62,6 @@ func NewEvent() (e *Event) {
 }
 
 func (e *Event) GetProperty(name string) (i interface{}, ok bool) {
-
 	if e.EventData != nil {
 		if i, ok = e.EventData[name]; ok {
 			return
@@ -75,7 +73,6 @@ func (e *Event) GetProperty(name string) (i interface{}, ok bool) {
 			return
 		}
 	}
-
 	return
 }
 

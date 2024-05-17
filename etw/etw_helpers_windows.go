@@ -2,12 +2,14 @@ package etw
 
 import (
 	"fmt"
-	"github.com/0xrawsec/golang-etw/winapi"
 	"math"
 	"os"
 	"strconv"
 	"syscall"
 	"unsafe"
+
+	"github.com/0xrawsec/golang-etw/winapi"
+	"github.com/0xrawsec/golang-etw/winguid"
 )
 
 const (
@@ -154,11 +156,11 @@ func (e *EventRecordHelper) setEventMetadata(event *Event) {
 	event.System.Computer = hostname
 	event.System.Execution.ProcessID = e.EventRec.EventHeader.ProcessId
 	event.System.Execution.ThreadID = e.EventRec.EventHeader.ThreadId
-	event.System.Correlation.ActivityID = e.EventRec.EventHeader.ActivityId.String()
+	event.System.Correlation.ActivityID = winguid.ToString(&e.EventRec.EventHeader.ActivityId)
 	event.System.Correlation.RelatedActivityID = e.EventRec.RelatedActivityID()
 	event.System.EventID = e.TraceInfo.EventID()
 	event.System.Channel = e.TraceInfo.ChannelName()
-	event.System.Provider.Guid = e.TraceInfo.ProviderGUID.String()
+	event.System.Provider.Guid = winguid.ToString(&e.TraceInfo.ProviderGUID)
 	event.System.Provider.Name = e.TraceInfo.ProviderName()
 	event.System.Level.Value = e.TraceInfo.EventDescriptor.Level
 	event.System.Level.Name = e.TraceInfo.LevelName()
@@ -178,7 +180,7 @@ func (e *EventRecordHelper) setEventMetadata(event *Event) {
 			eventType = fmt.Sprintf("UnknownClass/%s", event.System.Opcode.Name)
 		}
 		event.System.EventType = eventType
-		event.System.EventGuid = e.TraceInfo.EventGUID.String()
+		event.System.EventGuid = winguid.ToString(&e.TraceInfo.EventGUID)
 	}
 }
 
@@ -517,7 +519,7 @@ func (e *EventRecordHelper) SelectFields(names ...string) {
 }
 
 func (e *EventRecordHelper) ProviderGUID() string {
-	return e.TraceInfo.ProviderGUID.String()
+	return winguid.ToString(&e.TraceInfo.ProviderGUID)
 }
 
 func (e *EventRecordHelper) Provider() string {

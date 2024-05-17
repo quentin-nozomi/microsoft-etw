@@ -3,6 +3,7 @@ package winapi
 import (
 	"fmt"
 	"strings"
+	"syscall"
 	"unsafe"
 )
 
@@ -41,14 +42,14 @@ type ProviderEnumerationInfo struct {
 }
 
 type TraceProviderInfo struct {
-	ProviderGuid       GUID
+	ProviderGuid       syscall.GUID
 	SchemaSource       uint32
 	ProviderNameOffset uint32
 }
 
 type TraceEventInfo struct {
-	ProviderGUID                GUID
-	EventGUID                   GUID
+	ProviderGUID                syscall.GUID
+	EventGUID                   syscall.GUID
 	EventDescriptor             EventDescriptor
 	DecodingSource              DecodingSource
 	ProviderNameOffset          uint32

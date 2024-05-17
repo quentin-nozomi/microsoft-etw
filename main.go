@@ -6,31 +6,33 @@ import (
 	"time"
 
 	"github.com/0xrawsec/golang-etw/etw"
+	"github.com/0xrawsec/golang-etw/winguid"
+)
+
+const (
+	sysmonGUID = "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"
 )
 
 // Requires elevated privileges
 func main() {
-	eventTracingSession := etw.NewEventTracingSession("ArcTraceSession")
+	eventTracingSession := etw.NewEventTracingSession("NozomiArcETW")
 
 	defer eventTracingSession.Stop()
-	
-	provider := etw.Provider{
-		GUID:            "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
-		Name:            "Microsoft-Windows-Sysmon",
-		EnableLevel:     255,
-		MatchAnyKeyword: 0,
-		MatchAllKeyword: 0,
-		Filter:          nil,
+
+	providerGUID, guidErr := winguid.Parse(sysmonGUID)
+	if guidErr != nil {
+		panic(guidErr)
 	}
-	if err := eventTracingSession.EnableProvider(provider); err != nil {
+
+	var eventFilter []uint16 = nil
+
+	if err := eventTracingSession.EnableTrace(providerGUID, eventFilter); err != nil {
 		panic(err)
 	}
 
 	c := etw.NewRealTimeConsumer(context.Background())
 
 	defer c.Stop()
-
-	c.FromSessions(eventTracingSession)
 
 	go func() {
 		for e := range c.Events {

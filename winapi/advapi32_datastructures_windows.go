@@ -1,11 +1,11 @@
-//go:build windows
-
 package winapi
 
 import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/0xrawsec/golang-etw/winguid"
 )
 
 const (
@@ -41,7 +41,7 @@ type WnodeHeader struct {
 	ProviderId    uint32
 	Union1        uint64
 	Union2        int64
-	Guid          GUID
+	Guid          syscall.GUID
 	ClientContext uint32
 	Flags         uint32
 }
@@ -80,7 +80,7 @@ func NewEventTracingSessionProperties(logSessionName string) *EventTraceProperti
 		// https://learn.microsoft.com/en-us/windows/win32/etw/wnode-header#members
 		Wnode: WnodeHeader{
 			BufferSize:    uint32(eventTracePropertiesBufferSize),
-			Guid:          GUID{},
+			Guid:          syscall.GUID{},
 			ClientContext: 1,
 			Flags:         WNODE_FLAG_ALL_DATA,
 		},
@@ -98,7 +98,7 @@ type EnableTraceParameters struct {
 	Version          uint32
 	EnableProperty   uint32
 	ControlFlags     uint32
-	SourceId         GUID
+	SourceId         syscall.GUID
 	EnableFilterDesc *EventFilterDescriptor
 	FilterDescCount  uint32
 }
@@ -107,15 +107,21 @@ const (
 	EVENT_FILTER_TYPE_EVENT_ID = 0x80000200 // Event IDs.
 )
 
+const (
+	FilterInTrue  = 0x01
+	FilterInFalse = 0x00
+)
+
+// https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_filter_event_id
 type EventFilterEventID struct {
 	FilterIn uint8
 	Reserved uint8
 	Count    uint16
 
-	Events [1]uint16 // it is easier to implement in Go with a fixed array size
+	Events [1]uint16
 }
 
-// built-in max only available in Go 1.21+
+// built-in max function only available in Go 1.21+
 func getMax(a, b int) int {
 	if a < b {
 		return b
@@ -123,35 +129,44 @@ func getMax(a, b int) int {
 	return a
 }
 
-func AllocEventFilterEventID(filter []uint16) (f *EventFilterEventID) {
+func AllocEventFilterEventID(filter []uint16) *EventFilterEventID {
 	count := uint16(len(filter))
 	size := getMax(4+len(filter)*2, int(unsafe.Sizeof(EventFilterEventID{})))
 	buf := make([]byte, size)
 
-	// buf[0] should always be valid
-	f = (*EventFilterEventID)(unsafe.Pointer(&buf[0]))
-	eid := unsafe.Pointer(&f.Events[0])
+	eventIDFilter := (*EventFilterEventID)(unsafe.Pointer(&buf[0]))
+	eid := unsafe.Pointer(&eventIDFilter.Events[0])
 	for i := 0; i < len(filter); i++ {
 		*((*uint16)(eid)) = filter[i]
 		eid = unsafe.Add(eid, 2)
 	}
-	f.Count = count
-	return
+	eventIDFilter.Count = count
+
+	return eventIDFilter
 }
 
 func (e *EventFilterEventID) Size() int {
 	return 4 + int(e.Count)*2
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_filter_descriptor
 type EventFilterDescriptor struct {
 	Ptr  uint64
 	Size uint32
 	Type uint32
 }
 
-type FileTime struct {
-	dwLowDateTime  uint32
-	dwHighDateTime uint32
+func NewEventIDFilterDescriptor(filter []uint16) EventFilterDescriptor {
+	eventIDFilter := AllocEventFilterEventID(filter)
+	eventIDFilter.FilterIn = FilterInTrue
+
+	filterDescriptor := EventFilterDescriptor{
+		Ptr:  uint64(uintptr(unsafe.Pointer(eventIDFilter))),
+		Size: uint32(eventIDFilter.Size()),
+		Type: EVENT_FILTER_TYPE_EVENT_ID,
+	}
+
+	return filterDescriptor
 }
 
 type EventTraceLogfile struct {
@@ -203,11 +218,11 @@ func (e *EventRecord) RelatedActivityID() string {
 	for i := uint16(0); i < e.ExtendedDataCount; i++ {
 		item := e.ExtendedDataItem(i)
 		if item.ExtType == EVENT_HEADER_EXT_TYPE_RELATED_ACTIVITYID {
-			g := (*GUID)(unsafe.Pointer(item.DataPtr))
-			return g.String()
+			g := (*syscall.GUID)(unsafe.Pointer(item.DataPtr))
+			return winguid.ToString(g)
 		}
 	}
-	return nullGUIDStr
+	return winguid.NullGUIDStr
 }
 
 func (e *EventRecord) GetEventInformation() (tei *TraceEventInfo, err error) {
@@ -268,10 +283,10 @@ type EventHeader struct {
 	ThreadId        uint32
 	ProcessId       uint32
 	TimeStamp       int64
-	ProviderId      GUID
+	ProviderId      syscall.GUID
 	EventDescriptor EventDescriptor
 	Time            int64
-	ActivityId      GUID
+	ActivityId      syscall.GUID
 }
 
 func (e *EventHeader) UTCTimeStamp() time.Time {
@@ -295,7 +310,7 @@ type EventTrace struct {
 	Header           EventTraceHeader
 	InstanceId       uint32
 	ParentInstanceId uint32
-	ParentGuid       GUID
+	ParentGuid       syscall.GUID
 	MofData          uintptr
 	MofLength        uint32
 	UnionCtx         uint32
