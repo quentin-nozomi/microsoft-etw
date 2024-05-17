@@ -189,7 +189,6 @@ func (c *Consumer) OpenTrace(name string) (err error) {
 	return nil
 }
 
-// FromTraceNames initializes consumer from existing traces
 func (c *Consumer) FromTraceNames(names ...string) *Consumer {
 	for _, n := range names {
 		c.Traces[n] = true
@@ -218,11 +217,9 @@ func (c *Consumer) DefaultEventCallback(event *Event) error {
 }
 
 func (c *Consumer) Start() (err error) {
-
-	// opening all traces first
-	for n := range c.Traces {
-		if err = c.OpenTrace(n); err != nil {
-			return fmt.Errorf("failed to open trace %s: %w", n, err)
+	for traceName := range c.Traces {
+		if err = c.OpenTrace(traceName); err != nil {
+			return fmt.Errorf("failed to open trace %s: %w", traceName, err)
 		}
 	}
 

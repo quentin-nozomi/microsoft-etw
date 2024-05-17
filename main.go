@@ -10,12 +10,16 @@ import (
 )
 
 const (
+	arcTraceSessionName = "ArcTraceSession"
+)
+
+const (
 	sysmonGUID = "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}"
 )
 
 // Requires elevated privileges
 func main() {
-	eventTracingSession := etw.NewEventTracingSession("NozomiArcETW")
+	eventTracingSession := etw.NewEventTracingSession(arcTraceSessionName)
 
 	defer eventTracingSession.Stop()
 
@@ -26,27 +30,30 @@ func main() {
 
 	var eventFilter []uint16 = nil
 
-	if err := eventTracingSession.EnableTrace(providerGUID, eventFilter); err != nil {
-		panic(err)
+	sessionErr := eventTracingSession.EnableTrace(providerGUID, eventFilter)
+	if sessionErr != nil {
+		panic(sessionErr)
 	}
 
-	c := etw.NewRealTimeConsumer(context.Background())
+	consumer := etw.NewRealTimeConsumer(context.Background())
+	consumer.FromTraceNames(arcTraceSessionName)
+	defer consumer.Stop()
 
-	defer c.Stop()
-
+	// receive events
 	go func() {
-		for e := range c.Events {
+		for e := range consumer.Events {
 			fmt.Println(e)
 		}
 	}()
 
-	if err := c.Start(); err != nil {
-		panic(err)
+	consumerErr := consumer.Start()
+	if consumerErr != nil {
+		panic(consumerErr)
 	}
 
 	time.Sleep(20 * time.Second)
 
-	if c.Err() != nil {
-		panic(c.Err())
+	if consumer.Err() != nil {
+		panic(consumer.Err())
 	}
 }
