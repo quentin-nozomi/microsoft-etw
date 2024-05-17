@@ -1,7 +1,7 @@
 package etw
 
 import (
-	"github.com/0xrawsec/golang-etw/winapi"
+	"github.com/quentin-nozomi/microsoft-etw/winapi"
 )
 
 func EventIDFiltering(filter []uint16) []winapi.EventFilterDescriptor {

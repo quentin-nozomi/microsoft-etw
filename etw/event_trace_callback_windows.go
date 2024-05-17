@@ -6,8 +6,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/0xrawsec/golang-etw/winapi"
-	"github.com/0xrawsec/golang-etw/winguid"
+	"github.com/quentin-nozomi/microsoft-etw/winapi"
+	"github.com/quentin-nozomi/microsoft-etw/winguid"
 )
 
 // https://learn.microsoft.com/en-us/windows/win32/etw/lost-event
@@ -23,11 +23,10 @@ func (e *EventSender) Forward(channel chan<- *Event, event *Event) {
 	default:
 		e.Dropped++
 	}
-
 	return
 }
 
-type Consumer struct {
+type EventCallback struct {
 	ctx       context.Context
 	waitGroup sync.WaitGroup
 
@@ -41,28 +40,24 @@ type Consumer struct {
 	closed    bool
 }
 
-func NewEventCallback(ctx context.Context) (c *Consumer) {
-	c = &Consumer{
+func NewEventCallback(ctx context.Context) *EventCallback {
+	return &EventCallback{
 		ctx:    ctx,
 		Events: make(chan *Event, 4096),
 		Sender: EventSender{},
 	}
-
-	return c
 }
 
-func (c *Consumer) bufferCallback(*winapi.EventTraceLogfile) uintptr {
-	if c.ctx.Err() != nil {
+func (e *EventCallback) eventBufferCallback(*winapi.EventTraceLogfile) uintptr {
+	if e.ctx.Err() != nil {
 		return 0 // stop processing
 	}
 	return 1 // continue
 }
 
-func (c *Consumer) eventRecordCallback(er *winapi.EventRecord) uintptr {
-	var event *Event
-
+func (e *EventCallback) eventRecordCallback(er *winapi.EventRecord) uintptr {
 	if winguid.Equals(&er.EventHeader.ProviderId, realTimeSessionLostEventGuid) {
-		c.LostEvents++
+		e.LostEvents++
 	}
 
 	eventParser, err := newEventParser(er)
@@ -70,51 +65,42 @@ func (c *Consumer) eventRecordCallback(er *winapi.EventRecord) uintptr {
 		return 0
 	}
 
-	if eventParser.Flags.Skip {
-		return 0
-	}
-
 	eventParser.initialize()
-
-	if err := eventParser.prepareProperties(); err != nil {
-		c.lastError = err
+	parseErr := eventParser.prepareProperties()
+	if err != nil {
+		e.lastError = parseErr
 		return 0
 	}
 
-	if eventParser.Flags.Skip {
-		return 0
-	}
-
+	var event *Event
 	if event, err = eventParser.buildEvent(); err != nil {
-		c.lastError = err
+		e.lastError = err
 	}
 
-	c.Sender.Forward(c.Events, event)
+	e.Sender.Forward(e.Events, event)
 
 	return 0
 }
 
-func (c *Consumer) newEventTraceLogFile(eventTracingSessionName []uint16) winapi.EventTraceLogfile {
-	eventTraceLogfile := winapi.EventTraceLogfile{
+func (e *EventCallback) newEventTraceLogFile(eventTracingSessionName []uint16) *winapi.EventTraceLogfile {
+	return &winapi.EventTraceLogfile{
 		LoggerName:     &eventTracingSessionName[0],
 		Union1:         winapi.PROCESS_TRACE_MODE_EVENT_RECORD | winapi.PROCESS_TRACE_MODE_REAL_TIME,
-		BufferCallback: syscall.NewCallbackCDecl(c.bufferCallback),
-		Callback:       syscall.NewCallbackCDecl(c.eventRecordCallback),
+		BufferCallback: syscall.NewCallbackCDecl(e.eventBufferCallback),
+		Callback:       syscall.NewCallbackCDecl(e.eventRecordCallback),
 	}
-
-	return eventTraceLogfile
 }
 
-func (c *Consumer) OpenTrace(eventTracingSessionName []uint16) (syscall.Handle, error) {
+func (e *EventCallback) OpenTrace(eventTracingSessionName []uint16) (syscall.Handle, error) {
 	var traceHandle syscall.Handle
 	var err error
 
-	eventTraceLogFile := c.newEventTraceLogFile(eventTracingSessionName) // set callbacks
+	eventTraceLogFile := e.newEventTraceLogFile(eventTracingSessionName) // set callbacks
 	if err != nil {
 		return 0, err
 	}
 
-	traceHandle, err = winapi.OpenTrace(&eventTraceLogFile)
+	traceHandle, err = winapi.OpenTrace(eventTraceLogFile)
 	if err != nil {
 		return 0, err
 	}
@@ -122,55 +108,55 @@ func (c *Consumer) OpenTrace(eventTracingSessionName []uint16) (syscall.Handle, 
 	return traceHandle, nil
 }
 
-func (c *Consumer) Start(eventTracingSessionName []uint16) error {
-	traceHandle, err := c.OpenTrace(eventTracingSessionName)
+func (e *EventCallback) Start(eventTracingSessionName []uint16) error {
+	traceHandle, err := e.OpenTrace(eventTracingSessionName)
 	if err != nil {
 		return fmt.Errorf("failed to open trace %s: %w", syscall.UTF16ToString(eventTracingSessionName), err)
 	}
-	c.traceHandle = traceHandle
+	e.traceHandle = traceHandle
 
-	c.waitGroup.Add(1)
+	e.waitGroup.Add(1)
 	go func(traceHandle *syscall.Handle) {
-		defer c.waitGroup.Done()
+		defer e.waitGroup.Done()
 		processTraceErr := winapi.ProcessTrace(
 			traceHandle, 1, // 1 handle to a realtime session
 			nil, // no start time
 			nil, // no end time
 		)
 		if processTraceErr != nil {
-			c.lastError = processTraceErr
+			e.lastError = processTraceErr
 		}
 	}(&traceHandle)
 
 	return nil
 }
 
-func (c *Consumer) Err() error {
-	return c.lastError
+func (e *EventCallback) Err() error {
+	return e.lastError
 }
 
-func (c *Consumer) Stop() error {
-	return c.close()
+func (e *EventCallback) Stop() error {
+	return e.close()
 }
 
-func (c *Consumer) close() error {
-	if c.closed {
+func (e *EventCallback) close() error {
+	if e.closed {
 		return nil
 	}
 
 	var err error
 
-	closeTraceErr := winapi.CloseTrace(c.traceHandle)
+	closeTraceErr := winapi.CloseTrace(e.traceHandle)
 
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-closetrace#return-value
 	if err != nil && err != winapi.ERROR_CTX_CLOSE_PENDING {
 		err = closeTraceErr
 	}
 
-	c.waitGroup.Wait()
-	close(c.Events)
+	e.waitGroup.Wait()
+	close(e.Events)
 
-	c.closed = true
+	e.closed = true
 
 	return err
 }

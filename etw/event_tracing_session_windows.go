@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"syscall"
 
-	"github.com/0xrawsec/golang-etw/winapi"
+	"github.com/quentin-nozomi/microsoft-etw/winapi"
 )
 
 type EventTracingSession struct {

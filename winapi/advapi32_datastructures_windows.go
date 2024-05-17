@@ -5,7 +5,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/0xrawsec/golang-etw/winguid"
+	"github.com/quentin-nozomi/microsoft-etw/winguid"
 )
 
 const (

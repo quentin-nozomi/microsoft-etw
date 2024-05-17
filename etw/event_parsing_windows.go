@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/0xrawsec/golang-etw/winapi"
-	"github.com/0xrawsec/golang-etw/winguid"
+	"github.com/quentin-nozomi/microsoft-etw/winapi"
+	"github.com/quentin-nozomi/microsoft-etw/winguid"
 )
 
 const (
@@ -614,12 +614,4 @@ func (e *EventRecordHelper) ParseProperty(name string) (err error) {
 	}
 
 	return
-}
-
-func (e *EventRecordHelper) Skippable() {
-	e.Flags.Skippable = true
-}
-
-func (e *EventRecordHelper) Skip() {
-	e.Flags.Skip = true
 }

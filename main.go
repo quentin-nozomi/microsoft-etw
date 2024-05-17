@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/0xrawsec/golang-etw/etw"
-	"github.com/0xrawsec/golang-etw/winguid"
+	"github.com/quentin-nozomi/microsoft-etw/etw"
+	"github.com/quentin-nozomi/microsoft-etw/winguid"
 )
 
 const (
