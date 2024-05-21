@@ -7,12 +7,13 @@ import (
 type EventID uint16
 
 type Event struct {
-	Flags struct {
-		Skippable bool // Use to flag event as being skippable for performance reason
-	}
-	EventData map[string]interface{}
-	UserData  map[string]interface{}
-	System    struct {
+	EventData        map[string]string
+	EventDataArrays  map[string][]string
+	EventDataStructs map[string][]map[string]string
+
+	UserDataTemplate bool
+
+	System struct {
 		Channel     string
 		Computer    string
 		EventID     uint16
@@ -46,41 +47,7 @@ type Event struct {
 			Guid string
 			Name string
 		}
-		TimeCreated struct {
-			SystemTime time.Time
-		}
+		TimestampUTC time.Time
 	}
 	ExtendedData []string
-}
-
-func NewEvent() (e *Event) {
-	e = &Event{}
-	e.EventData = make(map[string]interface{})
-	e.UserData = make(map[string]interface{})
-	e.ExtendedData = make([]string, 0)
-	return e
-}
-
-func (e *Event) GetProperty(name string) (i interface{}, ok bool) {
-	if e.EventData != nil {
-		if i, ok = e.EventData[name]; ok {
-			return
-		}
-	}
-
-	if e.UserData != nil {
-		if i, ok = e.UserData[name]; ok {
-			return
-		}
-	}
-	return
-}
-
-func (e *Event) GetPropertyString(name string) (string, bool) {
-	if i, ok := e.GetProperty(name); ok {
-		if s, ok := i.(string); ok {
-			return s, ok
-		}
-	}
-	return "", false
 }

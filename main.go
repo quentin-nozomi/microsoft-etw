@@ -28,25 +28,22 @@ func main() {
 		panic(guidErr)
 	}
 
-	var eventFilter []uint16 = nil
-
-	sessionErr := eventTracingSession.EnableTrace(providerGUID, eventFilter)
+	sessionErr := eventTracingSession.EnableTrace(providerGUID)
 	if sessionErr != nil {
 		panic(sessionErr)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	consumer := etw.NewEventCallback(ctx)
+	eventCallback := etw.NewEventCallback(ctx)
 
-	// receive events
-	go func() {
-		for e := range consumer.Events {
+	go func() { // receive events
+		for e := range eventCallback.Events {
 			fmt.Println(e)
 		}
 	}()
 
-	startErr := consumer.Start(eventTracingSession.U16TraceName)
-	defer consumer.Stop()
+	startErr := eventCallback.ReceiveEvents(eventTracingSession.U16TraceName)
+	defer eventCallback.Stop()
 
 	if startErr != nil {
 		panic(startErr)
@@ -55,7 +52,7 @@ func main() {
 	time.Sleep(20 * time.Second)
 
 	cancel()
-	if consumer.Err() != nil {
-		panic(consumer.Err())
+	if eventCallback.Err() != nil {
+		panic(eventCallback.Err())
 	}
 }

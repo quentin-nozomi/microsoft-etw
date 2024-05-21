@@ -2,9 +2,8 @@ package etw
 
 import (
 	"fmt"
-	"syscall"
-
 	"github.com/quentin-nozomi/microsoft-etw/winapi"
+	"syscall"
 )
 
 type EventTracingSession struct {
@@ -34,14 +33,15 @@ func (e *EventTracingSession) IsStarted() bool {
 }
 
 func (e *EventTracingSession) StartTrace() error {
-	u16TraceName, _ := syscall.UTF16FromString("ArcTraceSession")
-	err := winapi.StartTrace(&e.handle, &u16TraceName[0], e.properties)
+	err := winapi.StartTrace(&e.handle, &e.U16TraceName[0], e.properties)
 
 	if err == winapi.ERROR_ALREADY_EXISTS {
 		originalProperties := *e.properties // copy
-		controlTraceErr := winapi.ControlTrace(0, &u16TraceName[0], &originalProperties, winapi.EVENT_TRACE_CONTROL_STOP)
-		fmt.Println(controlTraceErr.Error())
-		return winapi.StartTrace(&e.handle, &u16TraceName[0], e.properties)
+		controlTraceErr := winapi.ControlTrace(0, &e.U16TraceName[0], &originalProperties, winapi.EVENT_TRACE_CONTROL_STOP)
+		if controlTraceErr != nil {
+			fmt.Println(controlTraceErr.Error()) // TODO log
+		}
+		return winapi.StartTrace(&e.handle, &e.U16TraceName[0], e.properties)
 	}
 
 	return err
@@ -55,7 +55,7 @@ const (
 	defaultMatchAllKeyword = uint64(0)
 )
 
-func (e *EventTracingSession) EnableTrace(providerGUID *syscall.GUID, filter []uint16) error {
+func (e *EventTracingSession) EnableTrace(providerGUID *syscall.GUID) error {
 	var err error
 
 	if !e.IsStarted() {
@@ -65,14 +65,6 @@ func (e *EventTracingSession) EnableTrace(providerGUID *syscall.GUID, filter []u
 	}
 
 	enableTraceParameters := winapi.EnableTraceParameters{Version: 2}
-
-	if len(filter) > 0 {
-		eventFilterDescriptors := EventIDFiltering(filter)
-		if len(eventFilterDescriptors) > 0 {
-			enableTraceParameters.EnableFilterDesc = &eventFilterDescriptors[0]
-			enableTraceParameters.FilterDescCount = uint32(len(eventFilterDescriptors))
-		}
-	}
 
 	timeout := uint32(0)
 	enableTraceErr := winapi.EnableTraceEx2(

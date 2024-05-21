@@ -37,7 +37,6 @@ type EventCallback struct {
 	Sender EventSender
 
 	lastError error
-	closed    bool
 }
 
 func NewEventCallback(ctx context.Context) *EventCallback {
@@ -55,18 +54,17 @@ func (e *EventCallback) eventBufferCallback(*winapi.EventTraceLogfile) uintptr {
 	return 1 // continue
 }
 
-func (e *EventCallback) eventRecordCallback(er *winapi.EventRecord) uintptr {
-	if winguid.Equals(&er.EventHeader.ProviderId, realTimeSessionLostEventGuid) {
+func (e *EventCallback) eventRecordCallback(eventRecord *winapi.EventRecord) uintptr {
+	if winguid.Equals(&eventRecord.EventHeader.ProviderId, realTimeSessionLostEventGuid) {
 		e.LostEvents++
 	}
 
-	eventParser, err := newEventParser(er)
+	eventParser, err := newEventParser(eventRecord)
 	if err != nil {
 		return 0
 	}
 
-	eventParser.initialize()
-	parseErr := eventParser.prepareProperties()
+	parseErr := eventParser.parseProperties()
 	if err != nil {
 		e.lastError = parseErr
 		return 0
@@ -82,7 +80,7 @@ func (e *EventCallback) eventRecordCallback(er *winapi.EventRecord) uintptr {
 	return 0
 }
 
-func (e *EventCallback) newEventTraceLogFile(eventTracingSessionName []uint16) *winapi.EventTraceLogfile {
+func (e *EventCallback) newEventTraceLogFileRt(eventTracingSessionName []uint16) *winapi.EventTraceLogfile {
 	return &winapi.EventTraceLogfile{
 		LoggerName:     &eventTracingSessionName[0],
 		Union1:         winapi.PROCESS_TRACE_MODE_EVENT_RECORD | winapi.PROCESS_TRACE_MODE_REAL_TIME,
@@ -95,7 +93,7 @@ func (e *EventCallback) OpenTrace(eventTracingSessionName []uint16) (syscall.Han
 	var traceHandle syscall.Handle
 	var err error
 
-	eventTraceLogFile := e.newEventTraceLogFile(eventTracingSessionName) // set callbacks
+	eventTraceLogFile := e.newEventTraceLogFileRt(eventTracingSessionName) // set callbacks
 	if err != nil {
 		return 0, err
 	}
@@ -108,7 +106,7 @@ func (e *EventCallback) OpenTrace(eventTracingSessionName []uint16) (syscall.Han
 	return traceHandle, nil
 }
 
-func (e *EventCallback) Start(eventTracingSessionName []uint16) error {
+func (e *EventCallback) ReceiveEvents(eventTracingSessionName []uint16) error {
 	traceHandle, err := e.OpenTrace(eventTracingSessionName)
 	if err != nil {
 		return fmt.Errorf("failed to open trace %s: %w", syscall.UTF16ToString(eventTracingSessionName), err)
@@ -136,18 +134,8 @@ func (e *EventCallback) Err() error {
 }
 
 func (e *EventCallback) Stop() error {
-	return e.close()
-}
-
-func (e *EventCallback) close() error {
-	if e.closed {
-		return nil
-	}
-
 	var err error
-
 	closeTraceErr := winapi.CloseTrace(e.traceHandle)
-
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-closetrace#return-value
 	if err != nil && err != winapi.ERROR_CTX_CLOSE_PENDING {
 		err = closeTraceErr
@@ -155,8 +143,6 @@ func (e *EventCallback) close() error {
 
 	e.waitGroup.Wait()
 	close(e.Events)
-
-	e.closed = true
 
 	return err
 }

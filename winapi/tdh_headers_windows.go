@@ -15,15 +15,16 @@ type TdhContext struct {
 
 type TdhContextType int32
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-property_data_descriptor
 type PropertyDataDescriptor struct {
 	PropertyName uint64
-	ArrayIndex   uint32
+	ArrayIndex   uint32 // https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-property_data_descriptor#members
 	Reserved     uint32
 }
 
 type ProviderFieldInfoArray struct {
 	NumberOfElements uint32
-	FieldType        EventFieldType // This field is initially an enum so I guess it has the size of an int
+	FieldType        EventFieldType
 	FieldInfoArray   [1]ProviderFieldInfo
 }
 
@@ -47,6 +48,7 @@ type TraceProviderInfo struct {
 	ProviderNameOffset uint32
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-trace_event_info
 type TraceEventInfo struct {
 	ProviderGUID                syscall.GUID
 	EventGUID                   syscall.GUID
@@ -92,7 +94,6 @@ func (t *TraceEventInfo) cleanStringAt(offset uintptr) string {
 	return ""
 }
 
-// Seems to be always empty
 func (t *TraceEventInfo) EventMessage() string {
 	return t.cleanStringAt(uintptr(t.EventMessageOffset))
 }
@@ -121,12 +122,10 @@ func (t *TraceEventInfo) ChannelName() string {
 	return t.cleanStringAt(uintptr(t.ChannelNameOffset))
 }
 
-// Seems to be always empty
 func (t *TraceEventInfo) ActivityIDName() string {
 	return t.stringAt(uintptr(t.ActivityIDNameOffset))
 }
 
-// Seems to be always empty
 func (t *TraceEventInfo) RelatedActivityIDName() string {
 	return t.stringAt(uintptr(t.RelatedActivityIDNameOffset))
 }
@@ -147,24 +146,20 @@ func (t *TraceEventInfo) EventID() uint16 {
 			return c.BaseId + uint16(t.EventDescriptor.Opcode)
 		}
 	}
-	// not meaningful, cannot be used to identify event
+
 	return 0
 }
 
-func (t *TraceEventInfo) GetEventPropertyInfoAt(i uint32) *EventPropertyInfo {
-	if i < t.PropertyCount {
-		pEpi := uintptr(unsafe.Pointer(&t.EventPropertyInfoArray[0]))
-		pEpi += uintptr(i) * unsafe.Sizeof(EventPropertyInfo{})
-		// this line triggers checkptr
-		// I guess that is because TraceInfo is variable size C
-		// struct we had to hack with to make it compatible with Go
-		return ((*EventPropertyInfo)(unsafe.Pointer(pEpi)))
+func (t *TraceEventInfo) GetEventPropertyInfoAt(index uint32) *EventPropertyInfo {
+	if index < t.PropertyCount {
+		offset := uintptr(index) * unsafe.Sizeof(EventPropertyInfo{})
+		return (*EventPropertyInfo)(unsafe.Pointer(uintptr(unsafe.Pointer(&t.EventPropertyInfoArray[0])) + offset))
 	}
 	panic(fmt.Errorf("index out of range"))
 }
 
-func (t *TraceEventInfo) PropertyNameOffset(i uint32) uintptr {
-	return t.Pointer() + uintptr(t.GetEventPropertyInfoAt(i).NameOffset)
+func (t *TraceEventInfo) PropertyNameOffset(index uint32) uintptr {
+	return t.Pointer() + uintptr(t.GetEventPropertyInfoAt(index).NameOffset)
 }
 
 type DecodingSource int32
@@ -182,11 +177,12 @@ const (
 	TEMPLATE_USER_DATA  = TemplateFlags(2)
 )
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-event_map_info
 type EventMapInfo struct {
 	NameOffset    uint32
 	Flag          MapFlags
 	EntryCount    uint32
-	Union         uint32 // Not sure about size of union depends on size of enum MAP_VALUETYPE
+	Union         uint32
 	MapEntryArray [1]EventMapEntry
 }
 
@@ -194,16 +190,16 @@ func (e *EventMapInfo) GetEventMapEntryAt(i int) *EventMapEntry {
 	if uint32(i) < e.EntryCount {
 		pEmi := uintptr(unsafe.Pointer(&e.MapEntryArray[0]))
 		pEmi += uintptr(i) * unsafe.Sizeof(EventMapEntry{})
-		return ((*EventMapEntry)(unsafe.Pointer(pEmi)))
+		return (*EventMapEntry)(unsafe.Pointer(pEmi))
 	}
-	panic(fmt.Errorf("Index out of range"))
+	panic(fmt.Errorf("index out of range"))
 }
 
 func (e *EventMapInfo) RemoveTrailingSpace() {
 	for i := uint32(0); i < e.EntryCount; i++ {
 		me := e.GetEventMapEntryAt(int(i))
 		pStr := uintptr(unsafe.Pointer(e)) + uintptr(me.OutputOffset)
-		byteLen := (Wcslen(((*uint16)(unsafe.Pointer(pStr)))) - 1) * 2
+		byteLen := (Wcslen((*uint16)(unsafe.Pointer(pStr))) - 1) * 2
 		*((*uint16)(unsafe.Pointer(pStr + uintptr(byteLen)))) = 0
 	}
 }
@@ -217,6 +213,7 @@ type EventMapEntry struct {
 	Union        uint32
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-property_flags
 type PropertyFlags int32
 
 const (
@@ -225,6 +222,7 @@ const (
 	PropertyParamCount  = PropertyFlags(0x4)
 )
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-event_property_info
 type EventPropertyInfo struct {
 	Flags      PropertyFlags
 	NameOffset uint32
@@ -242,7 +240,7 @@ func (i *EventPropertyInfo) InType() uint16 {
 	return i.TypeUnion.u1
 }
 func (i *EventPropertyInfo) StructStartIndex() uint16 {
-	return i.InType()
+	return i.TypeUnion.u1
 }
 
 func (i *EventPropertyInfo) OutType() uint16 {
@@ -250,11 +248,11 @@ func (i *EventPropertyInfo) OutType() uint16 {
 }
 
 func (i *EventPropertyInfo) NumOfStructMembers() uint16 {
-	return i.OutType()
+	return i.TypeUnion.u2
 }
 
 func (i *EventPropertyInfo) MapNameOffset() uint32 {
-	return i.CustomSchemaOffset()
+	return i.TypeUnion.u3
 }
 
 func (i *EventPropertyInfo) CustomSchemaOffset() uint32 {
@@ -279,6 +277,7 @@ func (i *EventPropertyInfo) Length() uint16 {
 
 type TdhInType uint32
 
+// winmeta.xml
 // https://github.com/microsoft/ETW2JSON/blob/6721e0438733b316d316d36c488166853a05f836/Deserializer/Tdh.cs
 const (
 	TdhInTypeNull = TdhInType(iota)

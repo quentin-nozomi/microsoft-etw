@@ -95,16 +95,17 @@ func NewEventTracingSessionProperties(logSessionName string) *EventTraceProperti
 
 // https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-enable_trace_parameters
 type EnableTraceParameters struct {
-	Version          uint32
-	EnableProperty   uint32
-	ControlFlags     uint32
-	SourceId         syscall.GUID
+	Version        uint32
+	EnableProperty uint32
+	ControlFlags   uint32
+	SourceId       syscall.GUID
+
 	EnableFilterDesc *EventFilterDescriptor
 	FilterDescCount  uint32
 }
 
 const (
-	EVENT_FILTER_TYPE_EVENT_ID = 0x80000200 // Event IDs.
+	EVENT_FILTER_TYPE_EVENT_ID = 0x80000200
 )
 
 const (
@@ -121,52 +122,11 @@ type EventFilterEventID struct {
 	Events [1]uint16
 }
 
-// built-in max function only available in Go 1.21+
-func getMax(a, b int) int {
-	if a < b {
-		return b
-	}
-	return a
-}
-
-func AllocEventFilterEventID(filter []uint16) *EventFilterEventID {
-	count := uint16(len(filter))
-	size := getMax(4+len(filter)*2, int(unsafe.Sizeof(EventFilterEventID{})))
-	buf := make([]byte, size)
-
-	eventIDFilter := (*EventFilterEventID)(unsafe.Pointer(&buf[0]))
-	eid := unsafe.Pointer(&eventIDFilter.Events[0])
-	for i := 0; i < len(filter); i++ {
-		*((*uint16)(eid)) = filter[i]
-		eid = unsafe.Add(eid, 2)
-	}
-	eventIDFilter.Count = count
-
-	return eventIDFilter
-}
-
-func (e *EventFilterEventID) Size() int {
-	return 4 + int(e.Count)*2
-}
-
 // https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_filter_descriptor
 type EventFilterDescriptor struct {
 	Ptr  uint64
 	Size uint32
 	Type uint32
-}
-
-func NewEventIDFilterDescriptor(filter []uint16) EventFilterDescriptor {
-	eventIDFilter := AllocEventFilterEventID(filter)
-	eventIDFilter.FilterIn = FilterInTrue
-
-	filterDescriptor := EventFilterDescriptor{
-		Ptr:  uint64(uintptr(unsafe.Pointer(eventIDFilter))),
-		Size: uint32(eventIDFilter.Size()),
-		Type: EVENT_FILTER_TYPE_EVENT_ID,
-	}
-
-	return filterDescriptor
 }
 
 // https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_logfilew
@@ -222,15 +182,24 @@ func (e *EventRecord) RelatedActivityID() string {
 	return winguid.NullGUIDStr
 }
 
-func (e *EventRecord) GetEventInformation() (tei *TraceEventInfo, err error) {
-	bufferSize := uint32(0)
-	if err = TdhGetEventInformation(e, 0, nil, nil, &bufferSize); err == syscall.ERROR_INSUFFICIENT_BUFFER {
-		// don't know how this would behave
-		buff := make([]byte, bufferSize)
-		tei = (*TraceEventInfo)(unsafe.Pointer(&buff[0]))
-		err = TdhGetEventInformation(e, 0, nil, tei, &bufferSize)
+const traceEventInfoDefaultBufferSize = uint32(8192)
+
+func buildTraceEventInfo(eventRecord *EventRecord, bufferSize uint32) (*TraceEventInfo, uint32, error) {
+	var traceEventInfo *TraceEventInfo
+	defaultBuffer := make([]byte, bufferSize)
+	traceEventInfo = (*TraceEventInfo)(unsafe.Pointer(&defaultBuffer[0]))
+	err := TdhGetEventInformation(eventRecord, 0, nil, traceEventInfo, &bufferSize) // returns proper bufferSize if insufficient
+	return traceEventInfo, bufferSize, err
+}
+
+func (e *EventRecord) GetEventInformation() (*TraceEventInfo, error) {
+	traceEventInfo, outBufferSize, err := buildTraceEventInfo(e, traceEventInfoDefaultBufferSize)
+
+	if err == syscall.ERROR_INSUFFICIENT_BUFFER {
+		traceEventInfo, outBufferSize, err = buildTraceEventInfo(e, outBufferSize)
 	}
-	return
+
+	return traceEventInfo, err
 }
 
 func (e *EventRecord) GetMapInfo(pMapName *uint16, decodingSource uint32) (pMapInfo *EventMapInfo, err error) {
@@ -240,7 +209,7 @@ func (e *EventRecord) GetMapInfo(pMapName *uint16, decodingSource uint32) (pMapI
 	err = TdhGetEventMapInformation(e, pMapName, pMapInfo, &mapSize)
 
 	if err == syscall.ERROR_INSUFFICIENT_BUFFER {
-		buff := make([]byte, mapSize)
+		buff = make([]byte, mapSize)
 		pMapInfo = (*EventMapInfo)(unsafe.Pointer(&buff[0]))
 		err = TdhGetEventMapInformation(e, pMapName, pMapInfo, &mapSize)
 	}
@@ -272,6 +241,7 @@ type EventHeaderExtendedDataItem struct {
 	DataPtr        uintptr
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/evntcons/ns-evntcons-event_header
 type EventHeader struct {
 	Size            uint16
 	HeaderType      uint16
@@ -286,11 +256,14 @@ type EventHeader struct {
 	ActivityId      syscall.GUID
 }
 
-func (e *EventHeader) UTCTimeStamp() time.Time {
-	nano := int64(10000000)
-	sec := int64(float64(e.TimeStamp)/float64(nano) - 11644473600.0)
-	nsec := ((e.TimeStamp - 11644473600*nano) - sec*nano) * 100
-	return time.Unix(sec, nsec).UTC()
+func (e *EventHeader) ConvertTimestamp() time.Time {
+	lower := uint32(e.TimeStamp)
+	upper := uint32(e.TimeStamp >> 32)
+	filetime := syscall.Filetime{
+		LowDateTime:  lower,
+		HighDateTime: upper,
+	}
+	return time.Unix(0, filetime.Nanoseconds()).UTC()
 }
 
 type EventDescriptor struct {

@@ -40,6 +40,7 @@ func EnableTraceEx2(traceHandle syscall.Handle,
 	return syscall.Errno(errorCode)
 }
 
+// Blocking
 func ProcessTrace(
 	handleArray *syscall.Handle,
 	handleCount uint32,
