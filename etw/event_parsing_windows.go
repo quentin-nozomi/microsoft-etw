@@ -2,10 +2,12 @@ package etw
 
 import (
 	"fmt"
+	"golang.org/x/sys/windows"
 	"math"
-	"os"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/exp/constraints"
 
 	"github.com/quentin-nozomi/microsoft-etw/winapi"
 	"github.com/quentin-nozomi/microsoft-etw/winguid"
@@ -18,10 +20,7 @@ const (
 )
 
 var (
-	hostname, _ = os.Hostname()
-
 	ErrPropertyParsing = fmt.Errorf("error parsing property")
-	ErrUnknownProperty = fmt.Errorf("unknown property")
 )
 
 type Property struct {
@@ -34,85 +33,6 @@ type Property struct {
 
 	pValue         uintptr
 	userDataLength uint16
-}
-
-func maxu32(a, b uint32) uint32 {
-	if a < b {
-		return b
-	}
-	return a
-}
-
-func (p *Property) Parseable() bool {
-	return p.eventRecordParser != nil && p.eventPropertyInfo != nil && p.pValue > 0
-}
-
-func (p *Property) Value() (string, error) {
-	var err error
-
-	if p.value == "" && p.Parseable() {
-		p.value, err = p.parse()
-	}
-
-	return p.value, err
-}
-
-func (p *Property) parse() (value string, err error) {
-	var mapInfo *winapi.EventMapInfo
-	var udc uint16
-	var buff []uint16
-
-	formattedDataSize := maxu32(16, p.length)
-
-	// Get the name/value mapping if the property specifies a value map.
-	if p.eventPropertyInfo.MapNameOffset() > 0 {
-		pMapName := (*uint16)(unsafe.Pointer(p.eventRecordParser.TraceEventInfo.PointerOffset(uintptr(p.eventPropertyInfo.MapNameOffset()))))
-		decSrc := p.eventRecordParser.TraceEventInfo.DecodingSource
-		if mapInfo, err = p.eventRecordParser.EventRecord.GetMapInfo(pMapName, uint32(decSrc)); err != nil {
-			err = fmt.Errorf("failed to get map info: %s", err)
-			return
-		}
-	}
-
-	for {
-		buff = make([]uint16, formattedDataSize)
-
-		err = winapi.TdhFormatProperty(
-			p.eventRecordParser.TraceEventInfo,
-			mapInfo,
-			p.eventRecordParser.EventRecord.PointerSize(),
-			p.eventPropertyInfo.InType(),
-			p.eventPropertyInfo.OutType(),
-			uint16(p.length),
-			p.userDataLength,
-			(*byte)(unsafe.Pointer(p.pValue)),
-			&formattedDataSize,
-			&buff[0],
-			&udc)
-
-		if err == syscall.ERROR_INSUFFICIENT_BUFFER {
-			continue
-		}
-
-		if err == winapi.ERROR_EVT_INVALID_EVENT_DATA {
-			if mapInfo == nil {
-				break
-			}
-			mapInfo = nil
-			continue
-		}
-
-		if err == nil {
-			break
-		}
-
-		err = fmt.Errorf("failed to format property : %s", err)
-		return
-	}
-
-	value = syscall.UTF16ToString(buff)
-
-	return
 }
 
 type EventRecordParser struct {
@@ -146,12 +66,10 @@ func newEventParser(eventRecord *winapi.EventRecord) (*EventRecordParser, error)
 	return &eventRecordParser, nil
 }
 
-func (e *EventRecordParser) setMetadata(event *Event) {
-	event.System.Computer = hostname
+func (e *EventRecordParser) loadMetadata(event *Event) {
 	event.System.Execution.ProcessID = e.EventRecord.EventHeader.ProcessId
 	event.System.Execution.ThreadID = e.EventRecord.EventHeader.ThreadId
 	event.System.Correlation.ActivityID = winguid.ToString(&e.EventRecord.EventHeader.ActivityId)
-	event.System.Correlation.RelatedActivityID = e.EventRecord.RelatedActivityID()
 	event.System.EventID = e.TraceEventInfo.EventID()
 	event.System.Channel = e.TraceEventInfo.ChannelName()
 	event.System.Provider.Guid = winguid.ToString(&e.TraceEventInfo.ProviderGUID)
@@ -187,46 +105,25 @@ func (e *EventRecordParser) userDataLength() uint16 {
 	return uint16(e.endUserData() - e.userDataIterator)
 }
 
-func (e *EventRecordParser) getPropertyLength(i uint32) (uint32, error) {
-	if epi := e.TraceEventInfo.GetEventPropertyInfoAt(i); epi.Flags&winapi.PropertyParamLength == winapi.PropertyParamLength {
-		propSize := uint32(0)
+func (e *EventRecordParser) getPropertyLength(eventPropertyInfo *winapi.EventPropertyInfo) (uint32, error) {
+	if eventPropertyInfo.Flags&winapi.PropertyParamLength == winapi.PropertyParamLength {
+		propertySize := uint32(0)
 		length := uint32(0)
-		j := uint32(epi.LengthPropertyIndex())
-		pdd := winapi.PropertyDataDescriptor{}
-		pdd.PropertyName = uint64(e.TraceEventInfo.Pointer()) + uint64(e.TraceEventInfo.GetEventPropertyInfoAt(j).NameOffset)
-		pdd.ArrayIndex = math.MaxUint32
-		if err := winapi.TdhGetPropertySize(e.EventRecord, 0, nil, 1, &pdd, &propSize); err != nil {
+		lengthPropertyIndex := uint32(eventPropertyInfo.LengthPropertyIndex())
+		propertyDataDescriptor := winapi.PropertyDataDescriptor{}
+		propertyDataDescriptor.PropertyName = uint64(uintptr(unsafe.Pointer(e.TraceEventInfo))) + uint64(e.TraceEventInfo.GetEventPropertyInfoAt(lengthPropertyIndex).NameOffset)
+		propertyDataDescriptor.ArrayIndex = math.MaxUint32
+		if err := winapi.TdhGetPropertySize(e.EventRecord, 0, nil, 1, &propertyDataDescriptor, &propertySize); err != nil {
 			return 0, fmt.Errorf("failed to get property size: %s", err)
 		} else {
-			if err := winapi.TdhGetProperty(e.EventRecord, 0, nil, 1, &pdd, propSize, (*byte)(unsafe.Pointer(&length))); err != nil {
-				return 0, fmt.Errorf("failed to get property: %s", err)
+			getPropertyErr := winapi.TdhGetProperty(e.EventRecord, 0, nil, 1, &propertyDataDescriptor, propertySize, (*byte)(unsafe.Pointer(&length)))
+			if getPropertyErr != nil {
+				return 0, fmt.Errorf("failed to get property: %s", getPropertyErr)
 			}
 			return length, nil
 		}
 	} else {
-		if epi.Length() > 0 {
-			return uint32(epi.Length()), nil
-		} else {
-			switch {
-			// if there is an error returned here just try to add a switch case
-			// with the proper in type
-			case epi.InType() == uint16(winapi.TdhInTypeBinary) && epi.OutType() == uint16(winapi.TdhOutTypeIpv6):
-				// sizeof(IN6_ADDR) == 16
-				return uint32(16), nil
-			case epi.InType() == uint16(winapi.TdhInTypeUnicodestring):
-				return uint32(epi.Length()), nil
-			case epi.InType() == uint16(winapi.TdhInTypeAnsistring):
-				return uint32(epi.Length()), nil
-			case epi.InType() == uint16(winapi.TdhInTypeSid):
-				return uint32(epi.Length()), nil
-			case epi.InType() == uint16(winapi.TdhInTypeWbemsid):
-				return uint32(epi.Length()), nil
-			case epi.Flags&winapi.PropertyStruct == winapi.PropertyStruct:
-				return uint32(epi.Length()), nil
-			default:
-				return 0, fmt.Errorf("unexpected length of 0 for intype %d and outtype %d", epi.InType(), epi.OutType())
-			}
-		}
+		return uint32(eventPropertyInfo.Length()), nil
 	}
 }
 
@@ -245,7 +142,7 @@ func (e *EventRecordParser) getCount(eventPropertyInfo *winapi.EventPropertyInfo
 
 	if (eventPropertyInfo.Flags & winapi.PropertyParamCount) == winapi.PropertyParamCount {
 		nameOffset := uintptr(e.TraceEventInfo.GetEventPropertyInfoAt(uint32(eventPropertyInfo.CountUnion)).NameOffset)
-		propertyDataDescriptor.PropertyName = uint64(e.TraceEventInfo.Pointer() + nameOffset)
+		propertyDataDescriptor.PropertyName = uint64(uintptr(unsafe.Pointer(e.TraceEventInfo)) + nameOffset)
 
 		propertyDataDescriptor.ArrayIndex = math.MaxUint32 // https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-property_data_descriptor#members
 
@@ -267,19 +164,20 @@ func (e *EventRecordParser) getCount(eventPropertyInfo *winapi.EventPropertyInfo
 	return arraySize, err
 }
 
-func (e *EventRecordParser) prepareProperty(index uint32) (*Property, error) {
+func (e *EventRecordParser) getPropertyObject(index uint32) (*Property, error) {
 	var size uint32
 
 	property := Property{}
 	var err error
 
-	property.eventPropertyInfo = e.TraceEventInfo.GetEventPropertyInfoAt(index)
 	property.eventRecordParser = e
-	property.name = winapi.UTF16AtOffsetToString(e.TraceEventInfo.Pointer(), uintptr(property.eventPropertyInfo.NameOffset))
+	property.eventPropertyInfo = e.TraceEventInfo.GetEventPropertyInfoAt(index)
+
+	property.name = windows.UTF16PtrToString((*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(e.TraceEventInfo)) + uintptr(property.eventPropertyInfo.NameOffset))))
 	property.pValue = e.userDataIterator
 	property.userDataLength = e.userDataLength()
 
-	if property.length, err = e.getPropertyLength(index); err != nil {
+	if property.length, err = e.getPropertyLength(property.eventPropertyInfo); err != nil {
 		err = fmt.Errorf("failed to get property length: %s", err)
 		return &property, err
 	}
@@ -294,7 +192,7 @@ func (e *EventRecordParser) prepareProperty(index uint32) (*Property, error) {
 	return &property, err
 }
 
-func (e *EventRecordParser) parseProperties() error {
+func (e *EventRecordParser) getPropertiesObjects() error {
 	var count uint16
 	var parseError error
 	var property *Property
@@ -304,19 +202,19 @@ func (e *EventRecordParser) parseProperties() error {
 
 		array := []*Property{}
 
-		count, parseError = e.getCount(eventPropertyInfo)
+		count, parseError = e.getCount(eventPropertyInfo) // count is 1 if not an array
 		if parseError != nil {
 			return parseError
 		}
 
 		var arrayName string
 		for elementIndex := uint16(0); elementIndex < count; elementIndex++ {
-			if eventPropertyInfo.Flags&winapi.PropertyStruct == winapi.PropertyStruct { // structure
+			if eventPropertyInfo.Flags&winapi.PropertyStruct == winapi.PropertyStruct {
 				propStruct := make(map[string]*Property)
 				lastMemberIndex := eventPropertyInfo.StructStartIndex() + eventPropertyInfo.NumOfStructMembers()
 
 				for memberIndex := eventPropertyInfo.StructStartIndex(); memberIndex < lastMemberIndex; memberIndex++ {
-					property, parseError = e.prepareProperty(uint32(memberIndex))
+					property, parseError = e.getPropertyObject(uint32(memberIndex))
 					if parseError != nil {
 						return parseError
 					} else {
@@ -325,7 +223,7 @@ func (e *EventRecordParser) parseProperties() error {
 				}
 				e.Structures = append(e.Structures, propStruct)
 			} else {
-				property, parseError = e.prepareProperty(propertyIndex)
+				property, parseError = e.getPropertyObject(propertyIndex)
 				if parseError != nil {
 					return parseError
 				}
@@ -349,6 +247,11 @@ func (e *EventRecordParser) parseProperties() error {
 }
 
 func (e *EventRecordParser) buildEvent() (*Event, error) {
+	parseErr := e.getPropertiesObjects()
+	if parseErr != nil {
+		return nil, parseErr
+	}
+
 	event := Event{
 		EventData:        make(map[string]string),
 		EventDataArrays:  make(map[string][]string),
@@ -356,59 +259,60 @@ func (e *EventRecordParser) buildEvent() (*Event, error) {
 		ExtendedData:     make([]string, 0),
 	}
 
-	err := e.setProperties(&event)
+	err := e.parseAllPropertiesObjects(&event)
 	if err != nil {
 		return &event, err
 	}
 
-	e.setMetadata(&event)
+	e.loadMetadata(&event)
 
 	return &event, err
 }
 
-func (e *EventRecordParser) setProperties(out *Event) error {
+func (e *EventRecordParser) parseAllPropertiesObjects(event *Event) error {
 	var lastErr error
 	var err error
 
 	if (e.TraceEventInfo.Flags & winapi.TEMPLATE_USER_DATA) == winapi.TEMPLATE_USER_DATA {
-		out.UserDataTemplate = true
+		event.UserDataTemplate = true
 	}
 
-	for _, p := range e.Properties {
-		out.EventData[p.name], err = p.Value()
+	for _, property := range e.Properties {
+		event.EventData[property.name], err = property.getValue()
 		if err != nil {
-			lastErr = fmt.Errorf("%w %s: %s", ErrPropertyParsing, p.name, err)
+			lastErr = fmt.Errorf("%w %s: %s", ErrPropertyParsing, property.name, err)
 		}
 	}
 
-	for pname, props := range e.ArrayProperties {
-		values := make([]string, len(props))
+	for name, arrayProperty := range e.ArrayProperties {
+		values := make([]string, len(arrayProperty))
 
-		for _, p := range props {
+		for _, p := range arrayProperty {
 			var v string
-			v, err = p.Value()
+			v, err = p.getValue()
 			if err != nil {
-				lastErr = fmt.Errorf("%w array %s: %s", ErrPropertyParsing, pname, err)
+				lastErr = fmt.Errorf("%w array %s: %s", ErrPropertyParsing, name, err)
 			}
 
 			values = append(values, v)
 		}
 
-		out.EventDataArrays[pname] = values
+		event.EventDataArrays[name] = values
 	}
 
 	if len(e.Structures) > 0 {
 		structs := make([]map[string]string, len(e.Structures))
-		for _, m := range e.Structures {
-			s := make(map[string]string)
-			for field, prop := range m {
-				if s[field], err = prop.Value(); err != nil {
+		for _, structureProperty := range e.Structures {
+			structure := make(map[string]string)
+			for field, property := range structureProperty {
+				structure[field], err = property.getValue()
+				if err != nil {
 					lastErr = fmt.Errorf("%w %s.%s: %s", ErrPropertyParsing, StructurePropertyName, field, err)
 				}
 			}
 		}
 
-		out.EventDataStructs[StructurePropertyName] = structs
+		event.EventDataStructs[StructurePropertyName] = structs
 	}
 
 	return lastErr
@@ -430,10 +334,87 @@ func (e *EventRecordParser) EventID() uint16 {
 	return e.TraceEventInfo.EventID()
 }
 
-func (e *EventRecordParser) GetPropertyString(name string) (s string, err error) {
-	if p, ok := e.Properties[name]; ok {
-		return p.Value()
+// built-in max function only in Go 1.21+
+func getMax[T constraints.Ordered](a, b T) T {
+	if a < b {
+		return b
+	}
+	return a
+}
+
+func (p *Property) available() bool {
+	return p.eventRecordParser != nil && p.eventPropertyInfo != nil && p.pValue > 0
+}
+
+func (p *Property) getValue() (string, error) {
+	var err error
+
+	if p.value == "" && p.available() {
+		p.value, err = p.parse()
 	}
 
-	return "", fmt.Errorf("%w %s", ErrUnknownProperty, name)
+	return p.value, err
+}
+
+const minPropertyLength = 16
+
+func (p *Property) parse() (string, error) {
+	value := ""
+	var err error
+
+	var mapInfo *winapi.EventMapInfo
+	var userDataConsumed uint16
+	var buffer []uint16
+
+	formattedDataSize := getMax(minPropertyLength, p.length)
+
+	if p.eventPropertyInfo.MapNameOffset() > 0 {
+		pMapName := (*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(p.eventRecordParser.TraceEventInfo)) + uintptr(p.eventPropertyInfo.MapNameOffset())))
+		decSrc := p.eventRecordParser.TraceEventInfo.DecodingSource
+		if mapInfo, err = p.eventRecordParser.EventRecord.GetMapInfo(pMapName, uint32(decSrc)); err != nil {
+			err = fmt.Errorf("failed to get map info: %s", err)
+			return value, err
+		}
+	}
+
+	for {
+		buffer = make([]uint16, formattedDataSize)
+
+		err = winapi.TdhFormatProperty(
+			p.eventRecordParser.TraceEventInfo,
+			mapInfo,
+			p.eventRecordParser.EventRecord.PointerSize(),
+			p.eventPropertyInfo.InType(),
+			p.eventPropertyInfo.OutType(),
+			uint16(p.length),
+			p.userDataLength,
+			p.pValue,
+			&formattedDataSize,
+			&buffer[0],
+			&userDataConsumed,
+		)
+
+		if err == syscall.ERROR_INSUFFICIENT_BUFFER {
+			continue
+		}
+
+		if err == windows.ERROR_EVT_INVALID_EVENT_DATA {
+			if mapInfo == nil {
+				break
+			}
+			mapInfo = nil
+			continue
+		}
+
+		if err == nil {
+			break
+		}
+
+		err = fmt.Errorf("failed to format property : %s", err)
+		return value, err
+	}
+
+	value = syscall.UTF16ToString(buffer)
+
+	return value, err
 }

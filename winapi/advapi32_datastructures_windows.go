@@ -4,8 +4,6 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
-
-	"github.com/quentin-nozomi/microsoft-etw/winguid"
 )
 
 const (
@@ -30,10 +28,6 @@ const (
 
 const (
 	EVENT_HEADER_FLAG_32_BIT_HEADER = 0x0020
-)
-
-const (
-	EVENT_HEADER_EXT_TYPE_RELATED_ACTIVITYID = 0x0001
 )
 
 type WnodeHeader struct {
@@ -104,15 +98,6 @@ type EnableTraceParameters struct {
 	FilterDescCount  uint32
 }
 
-const (
-	EVENT_FILTER_TYPE_EVENT_ID = 0x80000200
-)
-
-const (
-	FilterInTrue  = 0x01
-	FilterInFalse = 0x00
-)
-
 // https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_filter_event_id
 type EventFilterEventID struct {
 	FilterIn uint8
@@ -171,17 +156,6 @@ func (e *EventRecord) ExtendedDataItem(i uint16) *EventHeaderExtendedDataItem {
 	panic("out of bound extended data item")
 }
 
-func (e *EventRecord) RelatedActivityID() string {
-	for i := uint16(0); i < e.ExtendedDataCount; i++ {
-		item := e.ExtendedDataItem(i)
-		if item.ExtType == EVENT_HEADER_EXT_TYPE_RELATED_ACTIVITYID {
-			g := (*syscall.GUID)(unsafe.Pointer(item.DataPtr))
-			return winguid.ToString(g)
-		}
-	}
-	return winguid.NullGUIDStr
-}
-
 const traceEventInfoDefaultBufferSize = uint32(8192)
 
 func buildTraceEventInfo(eventRecord *EventRecord, bufferSize uint32) (*TraceEventInfo, uint32, error) {
@@ -214,12 +188,6 @@ func (e *EventRecord) GetMapInfo(pMapName *uint16, decodingSource uint32) (pMapI
 		err = TdhGetEventMapInformation(e, pMapName, pMapInfo, &mapSize)
 	}
 
-	if err == nil {
-		if DecodingSource(decodingSource) == DecodingSourceXMLFile {
-			pMapInfo.RemoveTrailingSpace()
-		}
-	}
-
 	if err == syscall.ERROR_NOT_FOUND {
 		err = nil
 	}
@@ -233,6 +201,7 @@ func (e *EventRecord) PointerSize() uint32 {
 	return 8
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/evntcons/ns-evntcons-event_header_extended_data_item
 type EventHeaderExtendedDataItem struct {
 	Reserved1      uint16
 	ExtType        uint16
@@ -256,16 +225,7 @@ type EventHeader struct {
 	ActivityId      syscall.GUID
 }
 
-func (e *EventHeader) ConvertTimestamp() time.Time {
-	lower := uint32(e.TimeStamp)
-	upper := uint32(e.TimeStamp >> 32)
-	filetime := syscall.Filetime{
-		LowDateTime:  lower,
-		HighDateTime: upper,
-	}
-	return time.Unix(0, filetime.Nanoseconds()).UTC()
-}
-
+// https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_descriptor
 type EventDescriptor struct {
 	Id      uint16
 	Version uint8
@@ -371,4 +331,14 @@ type SecurityDescriptor struct {
 	Group                     *SID
 	Sacl                      *ACL
 	Dacl                      *ACL
+}
+
+func (e *EventHeader) ConvertTimestamp() time.Time {
+	lower := uint32(e.TimeStamp)
+	upper := uint32(e.TimeStamp >> 32)
+	filetime := syscall.Filetime{
+		LowDateTime:  lower,
+		HighDateTime: upper,
+	}
+	return time.Unix(0, filetime.Nanoseconds()).UTC()
 }

@@ -3,6 +3,8 @@ package winapi
 import (
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 func TdhGetEventInformation(pEvent *EventRecord,
@@ -17,7 +19,7 @@ func TdhGetEventInformation(pEvent *EventRecord,
 		uintptr(unsafe.Pointer(pTdhContext)),
 		uintptr(unsafe.Pointer(pBuffer)),
 		uintptr(unsafe.Pointer(pBufferSize)))
-	if errorCode == 0 {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
@@ -53,7 +55,7 @@ func TdhGetProperty(pEvent *EventRecord,
 		uintptr(unsafe.Pointer(pPropertyData)),
 		uintptr(bufferSize),
 		uintptr(unsafe.Pointer(pBuffer)))
-	if errorCode == 0 {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
@@ -72,24 +74,13 @@ func TdhGetPropertySize(pEvent *EventRecord,
 		uintptr(propertyDataCount),
 		uintptr(unsafe.Pointer(pPropertyData)),
 		uintptr(unsafe.Pointer(pPropertySize)))
-	if errorCode == 0 {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
 }
 
-func TdhFormatProperty(
-	eventInfo *TraceEventInfo,
-	mapInfo *EventMapInfo,
-	pointerSize uint32,
-	propertyInType uint16,
-	propertyOutType uint16,
-	propertyLength uint16,
-	userDataLength uint16,
-	userData *byte,
-	bufferSize *uint32,
-	buffer *uint16,
-	userDataConsumed *uint16) error {
+func TdhFormatProperty(eventInfo *TraceEventInfo, mapInfo *EventMapInfo, pointerSize uint32, propertyInType uint16, propertyOutType uint16, propertyLength uint16, userDataLength uint16, userData uintptr, bufferSize *uint32, buffer *uint16, userDataConsumed *uint16) error {
 	errorCode, _, _ := tdhFormatProperty.Call(
 		uintptr(unsafe.Pointer(eventInfo)),
 		uintptr(unsafe.Pointer(mapInfo)),
@@ -98,11 +89,11 @@ func TdhFormatProperty(
 		uintptr(propertyOutType),
 		uintptr(propertyLength),
 		uintptr(userDataLength),
-		uintptr(unsafe.Pointer(userData)),
+		userData,
 		uintptr(unsafe.Pointer(bufferSize)),
 		uintptr(unsafe.Pointer(buffer)),
 		uintptr(unsafe.Pointer(userDataConsumed)))
-	if errorCode == 0 {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)

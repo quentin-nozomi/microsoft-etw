@@ -2,11 +2,13 @@ package winapi
 
 import (
 	"fmt"
+	"golang.org/x/sys/windows"
 	"strings"
 	"syscall"
 	"unsafe"
 )
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-tdh_context
 type TdhContext struct {
 	ParameterValue uint32
 	ParameterType  TdhContextType
@@ -17,17 +19,19 @@ type TdhContextType int32
 
 // https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-property_data_descriptor
 type PropertyDataDescriptor struct {
-	PropertyName uint64
-	ArrayIndex   uint32 // https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-property_data_descriptor#members
+	PropertyName uint64 // pointer
+	ArrayIndex   uint32
 	Reserved     uint32
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-provider_field_infoarray
 type ProviderFieldInfoArray struct {
 	NumberOfElements uint32
 	FieldType        EventFieldType
 	FieldInfoArray   [1]ProviderFieldInfo
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-provider_field_info
 type ProviderFieldInfo struct {
 	NameOffset        uint32
 	DescriptionOffset uint32
@@ -36,12 +40,14 @@ type ProviderFieldInfo struct {
 
 type EventFieldType int32
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-provider_enumeration_info
 type ProviderEnumerationInfo struct {
 	NumberOfProviders      uint32
 	Reserved               uint32
 	TraceProviderInfoArray [1]TraceProviderInfo
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/tdh/ns-tdh-trace_provider_info
 type TraceProviderInfo struct {
 	ProviderGuid       syscall.GUID
 	SchemaSource       uint32
@@ -72,17 +78,9 @@ type TraceEventInfo struct {
 	EventPropertyInfoArray      [1]EventPropertyInfo
 }
 
-func (t *TraceEventInfo) Pointer() uintptr {
-	return uintptr(unsafe.Pointer(t))
-}
-
-func (t *TraceEventInfo) PointerOffset(offset uintptr) uintptr {
-	return t.Pointer() + offset
-}
-
 func (t *TraceEventInfo) stringAt(offset uintptr) string {
 	if offset > 0 {
-		return UTF16AtOffsetToString(t.Pointer(), offset)
+		return windows.UTF16PtrToString((*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(t)) + offset)))
 	}
 	return ""
 }
@@ -139,15 +137,7 @@ func (t *TraceEventInfo) IsXML() bool {
 }
 
 func (t *TraceEventInfo) EventID() uint16 {
-	if t.IsXML() {
-		return t.EventDescriptor.Id
-	} else if t.IsMof() {
-		if c, ok := MofClassMapping[t.EventGUID.Data1]; ok {
-			return c.BaseId + uint16(t.EventDescriptor.Opcode)
-		}
-	}
-
-	return 0
+	return t.EventDescriptor.Id
 }
 
 func (t *TraceEventInfo) GetEventPropertyInfoAt(index uint32) *EventPropertyInfo {
@@ -159,10 +149,10 @@ func (t *TraceEventInfo) GetEventPropertyInfoAt(index uint32) *EventPropertyInfo
 }
 
 func (t *TraceEventInfo) PropertyNameOffset(index uint32) uintptr {
-	return t.Pointer() + uintptr(t.GetEventPropertyInfoAt(index).NameOffset)
+	return uintptr(unsafe.Pointer(t)) + uintptr(t.GetEventPropertyInfoAt(index).NameOffset)
 }
 
-type DecodingSource int32
+type DecodingSource int32 // https://learn.microsoft.com/en-us/windows/win32/api/tdh/ne-tdh-decoding_source
 
 const (
 	DecodingSourceXMLFile = DecodingSource(0)
@@ -188,20 +178,9 @@ type EventMapInfo struct {
 
 func (e *EventMapInfo) GetEventMapEntryAt(i int) *EventMapEntry {
 	if uint32(i) < e.EntryCount {
-		pEmi := uintptr(unsafe.Pointer(&e.MapEntryArray[0]))
-		pEmi += uintptr(i) * unsafe.Sizeof(EventMapEntry{})
-		return (*EventMapEntry)(unsafe.Pointer(pEmi))
+		return (*EventMapEntry)(unsafe.Pointer(uintptr(unsafe.Pointer(&e.MapEntryArray[0])) + uintptr(i)*unsafe.Sizeof(EventMapEntry{})))
 	}
 	panic(fmt.Errorf("index out of range"))
-}
-
-func (e *EventMapInfo) RemoveTrailingSpace() {
-	for i := uint32(0); i < e.EntryCount; i++ {
-		me := e.GetEventMapEntryAt(int(i))
-		pStr := uintptr(unsafe.Pointer(e)) + uintptr(me.OutputOffset)
-		byteLen := (Wcslen((*uint16)(unsafe.Pointer(pStr))) - 1) * 2
-		*((*uint16)(unsafe.Pointer(pStr + uintptr(byteLen)))) = 0
-	}
 }
 
 type MapFlags int32

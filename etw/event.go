@@ -15,13 +15,11 @@ type Event struct {
 
 	System struct {
 		Channel     string
-		Computer    string
 		EventID     uint16
 		EventType   string
 		EventGuid   string
 		Correlation struct {
-			ActivityID        string
-			RelatedActivityID string
+			ActivityID string
 		}
 		Execution struct {
 			ProcessID uint32

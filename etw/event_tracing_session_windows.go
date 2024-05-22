@@ -35,7 +35,7 @@ func (e *EventTracingSession) IsStarted() bool {
 func (e *EventTracingSession) StartTrace() error {
 	err := winapi.StartTrace(&e.handle, &e.U16TraceName[0], e.properties)
 
-	if err == winapi.ERROR_ALREADY_EXISTS {
+	if err == syscall.ERROR_ALREADY_EXISTS {
 		originalProperties := *e.properties // copy
 		controlTraceErr := winapi.ControlTrace(0, &e.U16TraceName[0], &originalProperties, winapi.EVENT_TRACE_CONTROL_STOP)
 		if controlTraceErr != nil {

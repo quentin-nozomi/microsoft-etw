@@ -6,6 +6,8 @@ import (
 	"sync"
 	"syscall"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/quentin-nozomi/microsoft-etw/winapi"
 	"github.com/quentin-nozomi/microsoft-etw/winguid"
 )
@@ -59,24 +61,19 @@ func (e *EventCallback) eventRecordCallback(eventRecord *winapi.EventRecord) uin
 		e.LostEvents++
 	}
 
-	eventParser, err := newEventParser(eventRecord)
-	if err != nil {
+	eventParser, newEventErr := newEventParser(eventRecord)
+	if newEventErr != nil {
+		e.lastError = newEventErr
 		return 0
 	}
 
-	parseErr := eventParser.parseProperties()
-	if err != nil {
-		e.lastError = parseErr
+	event, buildEventErr := eventParser.buildEvent()
+	if newEventErr != nil {
+		e.lastError = buildEventErr
 		return 0
-	}
-
-	var event *Event
-	if event, err = eventParser.buildEvent(); err != nil {
-		e.lastError = err
 	}
 
 	e.Sender.Forward(e.Events, event)
-
 	return 0
 }
 
@@ -137,7 +134,7 @@ func (e *EventCallback) Stop() error {
 	var err error
 	closeTraceErr := winapi.CloseTrace(e.traceHandle)
 	// https://learn.microsoft.com/en-us/windows/win32/api/evntrace/nf-evntrace-closetrace#return-value
-	if err != nil && err != winapi.ERROR_CTX_CLOSE_PENDING {
+	if err != nil && err != windows.ERROR_CTX_CLOSE_PENDING {
 		err = closeTraceErr
 	}
 

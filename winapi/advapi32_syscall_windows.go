@@ -1,6 +1,7 @@
 package winapi
 
 import (
+	"golang.org/x/sys/windows"
 	"syscall"
 	"unsafe"
 )
@@ -10,7 +11,7 @@ func StartTrace(traceHandle *syscall.Handle, instanceName *uint16, properties *E
 		uintptr(unsafe.Pointer(traceHandle)),
 		uintptr(unsafe.Pointer(instanceName)),
 		uintptr(unsafe.Pointer(properties)))
-	if errorCode == ERROR_CODE_SUCCESS {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
@@ -34,7 +35,7 @@ func EnableTraceEx2(traceHandle syscall.Handle,
 		uintptr(matchAllKeyword),
 		uintptr(timeout),
 		uintptr(unsafe.Pointer(enableParameters)))
-	if errorCode == ERROR_CODE_SUCCESS {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
@@ -52,7 +53,7 @@ func ProcessTrace(
 		uintptr(handleCount),
 		uintptr(unsafe.Pointer(startTime)),
 		uintptr(unsafe.Pointer(endTime)))
-	if errorCode == ERROR_CODE_SUCCESS {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
@@ -60,7 +61,7 @@ func ProcessTrace(
 
 func OpenTrace(logfile *EventTraceLogfile) (syscall.Handle, error) {
 	handle, _, err := openTraceW.Call(uintptr(unsafe.Pointer(logfile)))
-	if err.(syscall.Errno) == ERROR_SUCCESS {
+	if err.(syscall.Errno) == windows.ERROR_SUCCESS {
 		return syscall.Handle(handle), nil
 	}
 	return syscall.Handle(handle), err
@@ -72,7 +73,7 @@ func ControlTrace(traceHandle syscall.Handle, instanceName *uint16, properties *
 		uintptr(unsafe.Pointer(instanceName)),
 		uintptr(unsafe.Pointer(properties)),
 		uintptr(controlCode))
-	if errorCode == ERROR_CODE_SUCCESS {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
@@ -80,7 +81,7 @@ func ControlTrace(traceHandle syscall.Handle, instanceName *uint16, properties *
 
 func CloseTrace(traceHandle syscall.Handle) error {
 	errorCode, _, _ := closeTrace.Call(uintptr(traceHandle))
-	if errorCode == ERROR_CODE_SUCCESS {
+	if errorCode == windows.NO_ERROR {
 		return nil
 	}
 	return syscall.Errno(errorCode)
