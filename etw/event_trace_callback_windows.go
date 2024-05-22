@@ -63,13 +63,13 @@ func (e *EventCallback) eventRecordCallback(eventRecord *winapi.EventRecord) uin
 
 	eventParser, newEventErr := newEventParser(eventRecord)
 	if newEventErr != nil {
-		e.lastError = newEventErr
+		e.lastError = newEventErr // TODO LOG
 		return 0
 	}
 
 	event, buildEventErr := eventParser.buildEvent()
-	if newEventErr != nil {
-		e.lastError = buildEventErr
+	if buildEventErr != nil {
+		e.lastError = buildEventErr // TODO LOG
 		return 0
 	}
 

@@ -4,8 +4,6 @@ import (
 	"time"
 )
 
-type EventID uint16
-
 type Event struct {
 	EventData        map[string]string
 	EventDataArrays  map[string][]string

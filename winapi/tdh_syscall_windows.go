@@ -80,7 +80,19 @@ func TdhGetPropertySize(pEvent *EventRecord,
 	return syscall.Errno(errorCode)
 }
 
-func TdhFormatProperty(eventInfo *TraceEventInfo, mapInfo *EventMapInfo, pointerSize uint32, propertyInType uint16, propertyOutType uint16, propertyLength uint16, userDataLength uint16, userData uintptr, bufferSize *uint32, buffer *uint16, userDataConsumed *uint16) error {
+func TdhFormatProperty(
+	eventInfo *TraceEventInfo,
+	mapInfo *EventMapInfo,
+	pointerSize uint32,
+	propertyInType uint16,
+	propertyOutType uint16,
+	propertyLength uint16,
+	userDataLength uint16,
+	userData uintptr,
+	bufferSize *uint32,
+	buffer *uint16,
+	userDataConsumed *uint16,
+) error {
 	errorCode, _, _ := tdhFormatProperty.Call(
 		uintptr(unsafe.Pointer(eventInfo)),
 		uintptr(unsafe.Pointer(mapInfo)),

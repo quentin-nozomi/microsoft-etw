@@ -67,18 +67,6 @@ func Parse(guid string) (*syscall.GUID, error) {
 	return &outGuid, nil
 }
 
-const (
-	NullGUIDStr = "{00000000-0000-0000-0000-000000000000}"
-)
-
-var (
-	nullGUID = syscall.GUID{}
-)
-
-func IsZero(g *syscall.GUID) bool {
-	return Equals(g, &nullGUID)
-}
-
 func ToString(g *syscall.GUID) string {
 	return fmt.Sprintf("{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
 		g.Data1,

@@ -128,7 +128,7 @@ func (t *TraceEventInfo) RelatedActivityIDName() string {
 	return t.stringAt(uintptr(t.RelatedActivityIDNameOffset))
 }
 
-func (t *TraceEventInfo) IsMof() bool {
+func (t *TraceEventInfo) IsManagedObjectFormat() bool {
 	return t.DecodingSource == DecodingSourceWbem
 }
 

@@ -178,13 +178,13 @@ func (e *EventRecord) GetEventInformation() (*TraceEventInfo, error) {
 
 func (e *EventRecord) GetMapInfo(pMapName *uint16, decodingSource uint32) (pMapInfo *EventMapInfo, err error) {
 	mapSize := uint32(64)
-	buff := make([]byte, mapSize)
-	pMapInfo = (*EventMapInfo)(unsafe.Pointer(&buff[0]))
+	buffer := make([]byte, mapSize)
+	pMapInfo = (*EventMapInfo)(unsafe.Pointer(&buffer[0]))
 	err = TdhGetEventMapInformation(e, pMapName, pMapInfo, &mapSize)
 
 	if err == syscall.ERROR_INSUFFICIENT_BUFFER {
-		buff = make([]byte, mapSize)
-		pMapInfo = (*EventMapInfo)(unsafe.Pointer(&buff[0]))
+		buffer = make([]byte, mapSize)
+		pMapInfo = (*EventMapInfo)(unsafe.Pointer(&buffer[0]))
 		err = TdhGetEventMapInformation(e, pMapName, pMapInfo, &mapSize)
 	}
 
@@ -223,6 +223,16 @@ type EventHeader struct {
 	EventDescriptor EventDescriptor
 	Time            int64
 	ActivityId      syscall.GUID
+}
+
+func ConvertInt64Timestamp(timestamp int64) time.Time {
+	lower := uint32(timestamp)
+	upper := uint32(timestamp >> 32)
+	filetime := syscall.Filetime{
+		LowDateTime:  lower,
+		HighDateTime: upper,
+	}
+	return time.Unix(0, filetime.Nanoseconds()).UTC()
 }
 
 // https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_descriptor
@@ -331,14 +341,4 @@ type SecurityDescriptor struct {
 	Group                     *SID
 	Sacl                      *ACL
 	Dacl                      *ACL
-}
-
-func (e *EventHeader) ConvertTimestamp() time.Time {
-	lower := uint32(e.TimeStamp)
-	upper := uint32(e.TimeStamp >> 32)
-	filetime := syscall.Filetime{
-		LowDateTime:  lower,
-		HighDateTime: upper,
-	}
-	return time.Unix(0, filetime.Nanoseconds()).UTC()
 }

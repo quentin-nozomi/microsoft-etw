@@ -1,14 +1,15 @@
 package winapi
 
-type MofClass struct {
+type ManagedObjectFormatClass struct {
 	Name string
 }
 
 // Windows SDK // https://github.com/tpn/winsdk-10/blob/master/Include/10.0.10240.0/km/wmiguid.h
 // https://learn.microsoft.com/en-us/windows/win32/etw/event-tracing-mof-classes
 // https://learn.microsoft.com/en-us/windows/win32/etw/nt-kernel-logger-constants
+// https://learn.microsoft.com/en-us/windows/win32/wmisdk/designing-managed-object-format--mof--classes
 var (
-	MofClassMapping = map[uint32]MofClass{
+	ManagedObjectFormatMapping = map[uint32]ManagedObjectFormatClass{
 		1171836109: {Name: "ALPC"},
 		2026983191: {Name: "ApplicationVerifier"},
 		328690953:  {Name: "DbgPrint"},

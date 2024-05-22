@@ -2,8 +2,9 @@ package etw
 
 import (
 	"fmt"
-	"github.com/quentin-nozomi/microsoft-etw/winapi"
 	"syscall"
+
+	"github.com/quentin-nozomi/microsoft-etw/winapi"
 )
 
 type EventTracingSession struct {
